@@ -7,20 +7,62 @@
   <meta name="description" content="Description">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0">
   <link rel="stylesheet" href="//cdn.jsdelivr.net/npm/docsify@4/lib/themes/vue.css">
+
 </head>
 <body>
   <div id="app"></div>
   <script>
     window.$docsify = {
-	loadSidebar: true,
+	<!-- loadSidebar: true,-->
+	search: 'auto', // 默认值
+	 // 加载自定义导航栏,需要目录下有_navbar.md文件
+            loadNavbar: true,
+            // 开启侧边栏，需要目录下有_sidebar.md文件
+            loadSidebar: true,
+            // 读取md文件中最大几级目录
+            subMaxLevel: 2,
+            // 切换页面后跳回页面顶部
       name: '',
-      repo: ''
+      repo: '',
+       // 分页导航插件
+            pagination: {
+                previousText: '上一卷',
+                nextText: '下一卷',
+                crossChapter: true,
+                crossChapterText: true
+            },
+            // 文本高亮
+            'flexible-alerts': {
+                style: 'flat',
+                note: {
+                    label: "信息"
+                },
+                tip: {
+                    label: "提示"
+                },
+                warning: {
+                    label: "注意"
+                },
+                attention: {
+                    label: "切记"
+                }
+            },
+
     }
   </script>
   <!-- Docsify v4 -->
+  
 <!-- Docsify v4 -->
   <script src="//cdn.jsdelivr.net/npm/docsify@4"></script>
   <script src="//unpkg.com/docsify-count/dist/countable.js"></script>
   <script async src="//busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
+  <!-- theme -->
+  <link rel="stylesheet" href="//cdn.jsdelivr.net/npm/docsify/lib/themes/vue.css">
+  <!-- 代码高亮-->
+  <script src="//cdn.jsdelivr.net/npm/prismjs@1/components/prism-bash.min.js"></script>
+<script src="//cdn.jsdelivr.net/npm/prismjs@1/components/prism-java.min.js"></script>
+<!-- search -->
+<script src="//cdn.jsdelivr.net/npm/docsify/lib/plugins/search.min.js"></script>
+<script src="//cdn.jsdelivr.net/npm/docsify-copy-code/dist/docsify-copy-code.min.js"></script>
 </body>
 </html>

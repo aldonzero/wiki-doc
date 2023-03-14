@@ -1,3 +1,6 @@
 * [首页](/README)
-* [Redis](/redis)
-* [http](/http)
+* [Redis](/Redis)
+* [http](/Http)
+* [算法](/算法)
+
+
