@@ -969,3 +969,40 @@ IO流程：
 - 引入多线程会面临线程安全问题，必然要引入线程锁这样的安全手段，实现复杂度增高，而且性能也会大打折扣
 
 ![输入图片说明](https://foruda.gitee.com/images/1678764140650862492/ee95bf76_8616658.png "屏幕截图")
+
+
+
+### Redis通信协议-RESP协议
+
+### Redis内存回收-过期key处理
+
+**惰性删除**
+
+惰性删除：顾明思议并不是在TTL到期后就立刻删除，而是在访问一个key的时候，检查该key的存活时间，如果已经过期才执行删除。
+
+**周期删除**
+
+周期删除：顾明思议是通过一个定时任务，周期性的抽样部分过期的key，然后执行删除。
+
+执行周期有两种：
+
+- Redis服务初始化函数initServer()中设置定时任务，按照server.hz的频率来执行过期key清理，模式为SLOW
+- Redis的每个事件循环前会调用beforeSleep()函数，执行过期key清理，模式为FAST
+
+### Redis内存回收-内存淘汰策略
+
+内存淘汰：就是当Redis内存使用达到设置的上限时，主动挑选部分key删除以释放更多内存的流程。Redis会在处理客户端命令的方法processCommand()中尝试做内存淘汰：
+
+Redis支持8种不同策略来选择要删除的key：
+
+- noeviction： 不淘汰任何key，但是内存满时不允许写入新数据，默认就是这种策略。
+- volatile-ttl： 对设置了TTL的key，比较key的剩余TTL值，TTL越小越先被淘汰
+- allkeys-random：对全体key ，随机进行淘汰。也就是直接从db->dict中随机挑选
+- volatile-random：对设置了TTL的key ，随机进行淘汰。也就是从db->expires中随机挑选。
+- allkeys-lru： 对全体key，基于LRU算法进行淘汰
+- volatile-lru： 对设置了TTL的key，基于LRU算法进行淘汰
+- allkeys-lfu： 对全体key，基于LFU算法进行淘汰
+- volatile-lfu： 对设置了TTL的key，基于LFI算法进行淘汰
+  比较容易混淆的有两个：
+  - LRU（Least Recently Used），最少最近使用。用当前时间减去最后一次访问时间，这个值越大则淘汰优先级越高。
+  - LFU（Least Frequently Used），最少频率使用。会统计每个key的访问频率，值越小淘汰优先级越高。
