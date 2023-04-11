@@ -1,4 +1,4 @@
-# Redis
+# 
 
 ## NoSQL
 
@@ -18,14 +18,6 @@ MySQL 支持 ACID 特性，保证可靠性和持久性，读取性能不高，�
 * 高可用，集群
 
 常见的 NoSQL：Redis、memcache、HBase、MongoDB
-
-
-
-参考书籍：https://book.douban.com/subject/25900156/
-
-参考视频：https://www.bilibili.com/video/BV1CJ411m7Gc
-
-
 
 ***
 
@@ -287,22 +279,574 @@ repl_baklog中会记录Redis处理过的命令日志及offset，包括master当�
 - slave节点断开又恢复，并且在repl_baklog中能找到offset时
 
 
-
 ##  Redis哨兵
 
-Redis提供了哨兵（Sentinel）机制来实现主从集群的自动故障恢复。
 
-### 哨兵原理
 
-#### 集群结构和作用
+### 概述
 
-![输入图片说明](https://foruda.gitee.com/images/1678265058759869745/3af4bfc8_8616658.png "屏幕截图")
+***
 
-哨兵的作用如下：
+Sentinel（哨兵）是 Redis 的高可用性（high availability）解决方案，由一个或多个 Sentinel 实例 instance 组成的 Sentinel 系统可以监视任意多个主服务器，以及这些主服务器的所有从服务器，并在被监视的主服务器下线时进行故障转移。(通俗理解，哨兵就是一个监控系统)
 
-- **监控**：Sentinel 会不断检查您的master和slave是否按预期工作
-- **自动故障恢复**：如果master故障，Sentinel会将一个slave提升为master。当故障实例恢复后也以新的master为主
-- **通知**：Sentinel充当Redis客户端的服务发现来源，当集群发生故障转移时，会将最新信息推送给Redis的客户端
+### 哨兵的作用
+
+***
+
+监控 master 和 slave的状态，当被监控服务器出现问题，向其他哨兵发送通知，当master出现故障时，选取一个slave作为master。
+
+- 监控：监控 master 和 slave，不断的检查 master 和 slave 是否正常运行，master 存活检测、master 与slave 运行情况检测
+- 通知：当被监控的服务器出现问题时，向其他哨兵发送通知
+- 自动故障转移：断开 master 与 slave 连接，选取一个 slave 作为 master，将其他 slave 连接新的 master，并告知客户端新的服务器地址
+
+<img src="https://foruda.gitee.com/images/1678265058759869745/3af4bfc8_8616658.png" style="zoom:60%;" />
+
+### 哨兵启用流程
+
+***
+
+1. 初始化服务器
+2. 将普通 Redis 服务器使用的代码替换成 Sentinel 专用代码
+3. 初始化 Sentinel 状态
+4. 根据给定的配置文件，初始化 Sentinel 的监视主服务器列表
+5. 创建连向主服务器的网络连接
+
+#### 1、初始化
+
+Sentinel 本质上只是一个运行在特殊模式下的 Redis 服务器，当一个 Sentinel 启动时，首先初始化 Redis 服务器，但是初始化过程和普通 Redis 服务器的初始化过程并不完全相同，哨兵不提供数据相关服务，所以不会载入RDB、AOF 文件
+
+#### 2、代码替换
+
+将一部分普通 Redis 服务器使用的代码替换成 Sentinel 专用代码
+
+#### 3、初始化 Sentinel 状态
+
+服务器会初始化一个 sentinelState 结构，又叫 Sentinel 状态，结构保存了服务器中所有和 Sentinel 功能有关的状态（服务器的一般状态仍然由 redisServer 结构保存）
+
+#### 4、监控列表
+Sentinel 状态的初始化将 masters 字典的初始化，根据被载入的 Sentinel 配置文件 conf 来进行属性赋值
+
+Sentinel 状态中的 masters 字典记录了所有被 Sentinel 监视的主服务器的相关信息，字典的键是被监视主服务器的名字，值是主服务器对应的实例结构
+
+实例结构是一个 sentinelRedisinstance 数据类型，代表被 Sentinel 监视的实例，这个实例可以是主、从服务器，或者其他 Sentinel
+
+#### 5、网络连接
+
+初始化 Sentinel 的最后一步是创建连向被监视主服务器的网络连接，Sentinel 将成为主服务器的客户端，可以向主服务器发送命令，并从命令回复中获取相关的信息
+
+每个被 Sentinel 监视的主服务器，Sentinel 会创建两个连向主服务器的异步网络连接：
+- 命令连接：用于向主服务器发送命令，并接收命令回复
+- 订阅连接：用于订阅主服务器的 _sentinel_:hello 频道
+
+建立两个连接的原因：
+- 在 Redis 目前的发布与订阅功能中，被发送的信息都不会保存在 Redis 服务器里， 如果在信息发送时接收信息的客户端离线或断线，那么这个客户端就会丢失这条信息，为了不丢失 hello 频道的任何信息，Sentinel 必须用一个订阅连接来接收该频道的信息
+
+  Sentinel 还必须向主服务器发送命令，以此来与主服务器进行通信，所以 Sentinel 还必须向主服务器创建命令连接
+
+  说明：断线的意思就是网络连接断开
+
+
+
+### 信息交互
+
+***
+
+
+
+![输入图片说明](https://foruda.gitee.com/images/1680252806934441821/9d126d94_8616658.png "屏幕截图")
+
+#### 获取信息
+
+##### 主服务器
+
+Sentinel 默认会以每十秒一次的频率，通过命令连接向被监视的主服务器发送 INFO 命令，来获取主服务器的信息
+
+- 一部分是主服务器本身的信息，包括 runid 域记录的服务器运行 ID，以及 role 域记录的服务器角色
+- 另一部分是服务器属下所有从服务器的信息，每个从服务器都由一个 slave 字符串开头的行记录，根据这些IP 地址和端口号，Sentinel 无须用户提供从服务器的地址信息，就可以**自动发现从服务器**
+
+```bash
+# Server
+run_id:76llc59dc3a29aa6fa0609f84lbb6al019008a9c
+...
+# Replication
+role:master
+...
+slave0: ip=l27.0.0.1, port=11111, state=online, offset=22, lag=0
+slave1: ip=l27.0.0.1, port=22222, state=online, offset=22, lag=0
+...
+```
+
+根据 run_id 和 role 记录的信息 Sentinel 将对主服务器的实例结构进行更新，比如主服务器重启之后，运行 ID 就会和实例结构之前保存的运行 ID 不同，哨兵检测到这一情况之后就会对实例结构的运行 ID 进行更新
+
+对于主服务器返回的从服务器信息，用实例结构的 slaves 字典记录了从服务器的信息：
+
+* 如果从服务器对应的实例结构已经存在，那么 Sentinel 对从服务器的实例结构进行更新
+* 如果不存在，为这个从服务器新创建一个实例结构加入字典，字典键为 `ip:port`
+
+
+
+##### 从服务器
+
+当 Sentinel 发现主服务器有新的从服务器出现时，会为这个新的从服务器创建相应的实例结构，还会**创建到从服务器的命令连接和订阅连接**，所以 Sentinel 对所有的从服务器之间都可以进行命令操作
+
+Sentinel 默认会以每十秒一次的频率，向从服务器发送 INFO 命令：
+
+```sh
+# Server 
+run_id:76llc59dc3a29aa6fa0609f84lbb6al019008a9c	#从服务器的运行 id
+...
+# Replication 
+role:slave 				# 从服务器角色
+...
+master_host:127.0.0.1 	# 主服务器的 ip
+master_port:6379 		# 主服务器的 port
+master_link_status:up 	# 主从服务器的连接状态
+slave_repl_offset:11111	# 从服务器的复制偏移蜇
+slave_priority:100 		# 从服务器的优先级
+...
+```
+
+* **优先级属性**在故障转移时会用到
+
+根据这些信息，Sentinel 会对从服务器的实例结构进行更新
+
+
+
+#### 发送信息
+
+Sentinel 在默认情况下，会以每两秒一次的频率，通过命令连接向所有被监视的主服务器和从服务器发送以下格式的命令：
+
+```sh
+PUBLISH _sentinel_:hello "<s_ip>, <s_port>, <s_runid>, <s_epoch>, <m_name>, <m_ip>, <m_port>, <m_epoch>
+```
+
+这条命令向服务器的 `_sentinel_:hello` 频道发送了一条信息，信息的内容由多个参数组成：
+
+* 以 s_ 开头的参数记录的是 Sentinel 本身的信息
+* 以 m_ 开头的参数记录的则是主服务器的信息
+
+说明：**通过命令连接发送的频道信息**
+
+
+
+#### 发送信息
+
+Sentinel 在默认情况下，会以每两秒一次的频率，通过命令连接向所有被监视的主服务器和从服务器发送以下格式的命令：
+
+```sh
+PUBLISH _sentinel_:hello "<s_ip>, <s_port>, <s_runid>, <s_epoch>, <m_name>, <m_ip>, <m_port>, <m_epoch>
+```
+
+这条命令向服务器的 `_sentinel_:hello` 频道发送了一条信息，信息的内容由多个参数组成：
+
+* 以 s_ 开头的参数记录的是 Sentinel 本身的信息
+* 以 m_ 开头的参数记录的则是主服务器的信息
+
+说明：**通过命令连接发送的频道信息**
+
+
+
+***
+
+
+
+#### 接受信息
+
+##### 订阅频道
+
+Sentinel 与一个主或从服务器建立起订阅连接之后，就会通过订阅连接向服务器发送订阅命令，频道的订阅会一直持续到 Sentinel 与服务器的连接断开为止
+
+```sh
+SUBSCRIBE _sentinel_:hello
+```
+
+订阅成功后，Sentinel 就可以通过订阅连接从服务器的 `_sentinel_:hello` 频道接收信息，对消息分析：
+
+* 如果信息中记录的 Sentinel 运行 ID 与自己的相同，不做进一步处理
+* 如果不同，将根据信息中的各个参数，对相应主服务器的实例结构进行更新
+
+Sentinel 为主服务器创建的实例结构的 sentinels 字典保存所有同样监视这个**主服务器的 Sentinel 信息**（包括 Sentinel 自己），字典的键是 Sentinel 的名字，格式为 `ip:port`，值是键所对应 Sentinel 的实例结构
+
+监视同一个服务器的 Sentinel 订阅的频道相同，Sentinel 发送的信息会被其他 Sentinel 接收到（发送信息的为源 Sentinel，接收信息的为目标 Sentinel），目标 Sentinel 在自己的 sentinelState.masters 中查找源 Sentinel 服务器的实例结构进行添加或更新
+
+因为 Sentinel 可以接收到的频道信息来感知其他 Sentinel 的存在，并通过发送频道信息来让其他 Sentinel 知道自己的存在，所以用户在使用 Sentinel 时并不需要提供各个 Sentinel 的地址信息，**监视同一个主服务器的多个 Sentinel 可以相互发现对方**
+
+哨兵实例之间可以相互发现，要归功于 Redis 提供发布订阅机制
+
+
+
+***
+
+
+
+##### 命令连接
+
+Sentinel 通过频道信息发现新的 Sentinel，除了创建实例结构，还会创建一个连向新 Sentinel 的命令连接，而新 Sentinel 也同样会创建连向这个 Sentinel 的命令连接，最终监视同一主服务器的多个 Sentinel 将形成相互连接的网络
+
+作用：**通过命令连接相连的各个 Sentinel** 可以向其他 Sentinel 发送命令请求来进行信息交换
+
+Sentinel 之间不会创建订阅连接：
+
+* Sentinel 需要通过接收主服务器或者从服务器发来的频道信息来发现未知的新 Sentinel，所以才创建订阅连接
+* 相互已知的 Sentinel 只要使用命令连接来进行通信就足够了
+
+
+
+
+***
+
+
+
+### 下线检测
+
+#### 主观下线
+
+Sentinel 在默认情况下会以每秒一次的频率向所有与它创建了命令连接的实例（包括主从服务器、其他 Sentinel）发送 PING 命令，通过实例返回的 PING 命令回复来判断实例是否在线
+
+* 有效回复：实例返回 +PONG、-LOADING、-MASTERDOWN 三种回复的其中一种
+* 无效回复：实例返回除上述三种以外的任何数据
+
+Sentinel 配置文件中 down-after-milliseconds 选项指定了判断实例进入主观下线所需的时长，如果主服务器在该时间内一直向 Sentinel 返回无效回复，Sentinel 就会在该服务器对应实例结构的 flags 属性打开 SRI_S_DOWN 标识，表示该主服务器进入主观下线状态
+
+配置的 down-after-milliseconds 值不仅适用于主服务器，还会被用于当前 Sentinel 判断主服务器属下的所有从服务器，以及所有同样监视这个主服务器的其他 Sentinel 的主观下线状态
+
+注意：对于监视同一个主服务器的多个 Sentinel 来说，设置的 down-after-milliseconds 选项的值可能不同，所以当一个 Sentinel 将主服务器判断为主观下线时，其他 Sentinel 可能仍然会认为主服务器处于在线状态
+
+
+
+***
+
+
+
+#### 客观下线
+
+当 Sentinel 将一个主服务器判断为主观下线之后，会向同样监视这一主服务器的其他 Sentinel 进行询问
+
+Sentinel 使用命令询问其他 Sentinel 是否同意主服务器已下线：
+
+```sh
+SENTINEL is-master-down-by-addr <ip> <port> <current_epoch> <runid>
+```
+
+* ip：被 Sentinel 判断为主观下线的主服务器的 IP 地址
+* port：被 Sentinel 判断为主观下线的主服务器的端口号
+* current_epoch：Sentinel 当前的配置纪元，用于选举领头 Sentinel
+* runid：取值为 * 符号代表命令仅仅用于检测主服务器的客观下线状态；取值为 Sentinel 的运行 ID 则用于选举领头 Sentinel
+
+目标 Sentinel 接收到源 Sentinel 的命令时，会根据参数的 lP 和端口号，检查主服务器是否已下线，然后返回一条包含三个参数的 Multi Bulk 回复：
+
+* down_state：返回目标 Sentinel 对服务器的检查结果，1 代表主服务器已下线，0 代表未下线
+* leader_runid：取值为 * 符号代表命令仅用于检测服务器的下线状态；而局部领头 Sentinel 的运行 ID 则用于选举领头 Sentinel
+* leader_epoch：目标 Sentinel 的局部领头 Sentinel 的配置纪元
+
+源 Sentinel 将统计其他 Sentinel 同意主服务器已下线的数量，当这一数量达到配置指定的判断客观下线所需的数量（quorum）时，Sentinel 会将主服务器对应实例结构 flags 属性的 SRI_O_DOWN 标识打开，代表客观下线，并对主服务器执行故障转移操作
+
+注意：**不同 Sentinel 判断客观下线的条件可能不同**，因为载入的配置文件中的属性 quorum 可能不同
+
+
+
+***
+
+
+
+### 领头选举
+
+主服务器被判断为客观下线时，**监视该主服务器的各个 Sentinel 会进行协商**，选举出一个领头 Sentinel 对下线服务器执行故障转移
+
+Redis 选举领头 Sentinel 的规则：
+
+* 所有在线的 Sentinel 都有被选为领头 Sentinel 的资格
+* 每个发现主服务器进入客观下线的 Sentinel 都会要求其他 Sentinel 将自己设置为局部领头 Sentinel
+
+* 在一个配置纪元里，所有 Sentinel 都只有一次将某个 Sentinel 设置为局部领头 Sentinel 的机会，并且局部领头一旦设置，在这个配置纪元里就不能再更改
+* Sentinel 设置局部领头 Sentinel 的规则是先到先得，最先向目标 Sentinel 发送设置要求的源 Sentinel 将成为目标 Sentinel 的局部领头 Sentinel，之后接收到的所有设置要求都会被目标 Sentinel 拒绝
+* 领头 Sentinel 的产生**需要半数以上 Sentinel 的支持**，并且每个 Sentinel 只有一票，所以一个配置纪元只会出现一个领头 Sentinel，比如 10 个 Sentinel 的系统中，至少需要 `10/2 + 1 = 6` 票
+
+选举过程：
+
+* 一个 Sentinel 向目标 Sentinel 发送 `SENTINEL is-master-down-by-addr` 命令，命令中的 runid 参数不是＊符号而是源 Sentinel 的运行 ID，表示源 Sentinel 要求目标 Sentinel 将自己设置为它的局部领头 Sentinel
+* 目标 Sentinel 接受命令处理完成后，将返回一条命令回复，回复中的 leader_runid 和 leader_epoch 参数分别记录了目标 Sentinel 的局部领头 Sentinel 的运行 ID 和配置纪元
+* 源 Sentinel 接收目标 Sentinel 命令回复之后，会判断 leader_epoch 是否和自己的相同，相同就继续判断 leader_runid 是否和自己的运行 ID 一致，成立表示目标 Sentinel 将源 Sentinel 设置成了局部领头 Sentinel，即获得一票
+* 如果某个 Sentinel 被半数以上的 Sentinel 设置成了局部领头 Sentinel，那么这个 Sentinel 成为领头 Sentinel
+* 如果在给定时限内，没有一个 Sentinel 被选举为领头 Sentinel，那么各个 Sentinel 将在一段时间后**再次选举**，直到选出领头
+* 每次进行领头 Sentinel 选举之后，不论选举是否成功，所有 Sentinel 的配置纪元（configuration epoch）都要自增一次
+
+Sentinel 集群至少 3 个节点的原因：
+
+* 如果 Sentinel 集群只有 2 个 Sentinel 节点，则领头选举需要 `2/2 + 1 = 2` 票，如果一个节点挂了，那就永远选不出领头
+* Sentinel 集群允许 1 个 Sentinel 节点故障则需要 3 个节点的集群，允许 2 个节点故障则需要 5 个节点集群
+
+**如何获取哨兵节点的半数数量**？
+
+* 客观下线是通过配置文件获取的数量，达到  quorum 就客观下线
+* 哨兵数量是通过主节点是实例结构中，保存着监视该主节点的所有哨兵信息，从而获取得到
+
+
+***
+
+
+
+### 故障转移
+
+#### 执行流程
+
+领头 Sentinel 将对已下线的主服务器执行故障转移操作，该操作包含以下三个步骤
+
+* 从下线主服务器属下的所有从服务器里面，挑选出一个从服务器，执行 `SLAVEOF no one`，将从服务器升级为主服务器
+
+  在发送 SLAVEOF no one 命令后，领头 Sentinel 会以**每秒一次的频率**（一般是 10s/次）向被升级的从服务器发送 INFO 命令，观察命令回复中的角色信息，当被升级服务器的 role 从 slave 变为 master 时，说明从服务器已经顺利升级为主服务器
+
+* 将已下线的主服务器的所有从服务器改为复制新的主服务器，通过向从服务器发送 SLAVEOF 命令实现
+
+* 将已经下线的主服务器设置为新的主服务器的从服务器，设置是保存在服务器对应的实例结构中，当旧的主服务器重新上线时，Sentinel 就会向它发送 SLAVEOF 命令，成为新的主服务器的从服务器
+
+示例：sever1 是主，sever2、sever3、sever4 是从服务器，sever1 故障后选中 sever2 升级
+
+![输入图片说明](https://foruda.gitee.com/images/1680251637655239274/608a310b_8616658.png "屏幕截图")
+
+
+
+#### 选择算法
+
+领头 Sentinel 会将已下线主服务器的所有从服务器保存到一个列表里，然后按照以下规则对列表进行过滤，最后挑选出一个**状态良好、数据完整**的从服务器
+
+* 删除列表中所有处于下线或者断线状态的从服务器，保证列表中的从服务器都是正常在线的
+
+* 删除列表中所有最近五秒内没有回复过领头 Sentinel 的 INFO 命令的从服务器，保证列表中的从服务器最近成功进行过通信
+
+* 删除所有与已下线主服务器连接断开超过 `down-after-milliseconds * 10` 毫秒的从服务器，保证列表中剩余的从服务器都没有过早地与主服务器断开连接，保存的数据都是比较新的
+
+  down-after-milliseconds 时间用来判断是否主观下线，其余的时间完全可以完成客观下线和领头选举
+
+* 根据从服务器的优先级，对列表中剩余的从服务器进行排序，并选出其中**优先级最高**的从服务器
+
+* 如果有多个具有相同最高优先级的从服务器，领头 Sentinel 将对这些相同优先级的服务器按照复制偏移量进行排序，选出其中偏移量最大的从服务器，也就是保存着最新数据的从服务器
+
+* 如果还没选出来，就按照运行 ID 对这些从服务器进行排序，并选出其中运行 ID 最小的从服务器
+
+
+
+## 集群模式
+
+### 集群节点
+
+#### 节点概述
+
+Redis 集群是 Redis 提供的分布式数据库方案，集群通过分片（sharding）来进行数据共享， 并提供复制和故障转移功能，一个 Redis 集群通常由多个节点（node）组成，将各个独立的节点连接起来，构成一个包含多节点的集群
+
+一个节点就是一个**运行在集群模式下的 Redis 服务器**，Redis 在启动时会根据配置文件中的 `cluster-enabled` 配置选项是否为 yes 来决定是否开启服务器的集群模式
+
+节点会继续使用所有在单机模式中使用的服务器组件，使用 redisServer 结构来保存服务器的状态，使用 redisClient 结构来保存客户端的状态，也有集群特有的数据结构
+
+![输入图片说明](https://foruda.gitee.com/images/1680253055667759249/2e809585_8616658.png "屏幕截图")
+
+
+
+#### 数据结构
+
+每个节点都保存着一个集群状态 clusterState 结构，这个结构记录了在当前节点的视角下，集群目前所处的状态
+
+```c
+typedef struct clusterState {
+    // 指向当前节点的指针
+	clusterNode *myself;
+    
+	// 集群当前的配置纪元，用于实现故障转移
+	uint64_t currentEpoch;
+    
+	// 集群当前的状态，是在线还是下线
+	int state;
+    
+	// 集群中至少处理着一个槽的（主）节点的数量，为0表示集群目前没有任何节点在处理槽
+    // 【选举时投票数量超过半数，从这里获取的】
+	int size;
+
+    // 集群节点名单（包括 myself 节点），字典的键为节点的名字，字典的值为节点对应的clusterNode结构 
+    dict *nodes;
+}
+```
+
+每个节点都会使用 clusterNode 结构记录当前状态，并为集群中的所有其他节点（包括主节点和从节点）都创建一个相应的 clusterNode 结构，以此来记录其他节点的状态
+
+```c
+struct clusterNode {
+    // 创建节点的时间
+    mstime_t ctime;
+    
+    // 节点的名字，由 40 个十六进制字符组成
+    char name[REDIS_CLUSTER_NAMELEN];
+    
+    // 节点标识，使用各种不同的标识值记录节点的角色（比如主节点或者从节点）以及节点目前所处的状态（比如在线或者下线）
+    int flags;
+    
+    // 节点当前的配置纪元，用于实现故障转移
+    uint64_t configEpoch;
+    
+    // 节点的IP地址
+    char ip[REDIS_IP_STR_LEN];
+    
+    // 节点的端口号
+    int port;
+    
+    // 保存连接节点所需的有关信息
+    clusterLink *link;
+}
+```
+
+clusterNode 结构的 link 属性是一个 clusterLink 结构，该结构保存了连接节点所需的有关信息
+
+```c
+typedef struct clusterLink {
+    // 连接的创建时间 
+    mstime_t ctime;
+    
+	// TCP套接字描述符
+	int fd;
+    
+	// 输出缓冲区，保存着等待发送给其他节点的消息(message)。 
+    sds sndbuf;
+    
+	// 输入缓冲区，保存着从其他节点接收到的消息。
+	sds rcvbuf;
+    
+	// 与这个连接相关联的节点，如果没有的话就为NULL
+	struct clusterNode *node; 
+}
+```
+
+* redisClient 结构中的套接宇和缓冲区是用于连接客户端的
+* clusterLink 结构中的套接宇和缓冲区则是用于连接节点的
+
+#### MEET
+
+CLUSTER MEET 命令用来将 ip 和 port 所指定的节点添加到接受命令的节点所在的集群中
+
+```sh
+CLUSTER MEET <ip> <port> 
+```
+
+假设向节点 A 发送 CLUSTER MEET 命令，让节点 A 将另一个节点 B 添加到节点 A 当前所在的集群里，收到命令的节点 A 将与根据 ip 和 port 向节点 B 进行握手（handshake）：
+
+* 节点 A 会为节点 B 创建一个 clusterNode 结构，并将该结构添加到自己的 clusterState.nodes 字典里，然后节点 A 向节点 B **发送 MEET 消息**（message）
+* 节点 B 收到 MEET 消息后，节点 B 会为节点 A 创建一个 clusterNode 结构，并将该结构添加到自己的 clusterState.nodes 字典里，之后节点 B 将向节点 A **返回一条 PONG 消息**
+* 节点 A 收到 PONG 消息后，代表节点 A 可以知道节点 B 已经成功地接收到了自已发送的 MEET 消息，此时节点 A 将向节点 B **返回一条 PING 消息**
+* 节点 B 收到 PING 消息后， 代表节点 B 可以知道节点 A 已经成功地接收到了自己返回的 PONG 消息，握手完成
+
+![输入图片说明](https://foruda.gitee.com/images/1680254124558376003/6036cf7c_8616658.png "屏幕截图")
+
+节点 A 会将节点 B 的信息通过 Gossip 协议传播给集群中的其他节点，让其他节点也与节点 B 进行握手，最终经过一段时间之后，节点 B 会被集群中的所有节点认识
+
+
+
+### 槽指派
+
+#### 基本操作
+
+Redis 集群通过分片的方式来保存数据库中的键值对，集群的整个数据库被分为 16384 个槽（slot），数据库中的每个键都属于 16384 个槽中的一个，集群中的每个节点可以处理 0 个或最多 16384 个槽（**每个主节点存储的数据并不一样**）
+
+* 当数据库中的 16384 个槽都有节点在处理时，集群处于上线状态（ok）
+* 如果数据库中有任何一个槽得没有到处理，那么集群处于下线状态（fail）
+
+通过向节点发送 CLUSTER ADDSLOTS 命令，可以将一个或多个槽指派（assign）给节点负责
+
+```sh
+CLUSTER ADDSLOTS <slot> [slot ... ] 
+```
+
+```sh
+127.0.0.1:7000> CLUSTER ADDSLOTS 0 1 2 3 4 ... 5000 # 将槽0至槽5000指派给节点7000负责
+OK 
+```
+
+命令执行细节：
+
+* 如果命令参数中有一个槽已经被指派给了某个节点，那么会向客户端返回错误，并终止命令执行
+* 将 slots 数组中的索引 i 上的二进制位设置为 1，就代表指派成功
+
+
+
+
+***
+
+
+
+#### 节点指派
+
+clusterNode 结构的 slots 属性和 numslot 属性记录了节点负责处理哪些槽：
+
+```c
+struct clusterNode {
+    // 处理信息，一字节等于 8 位
+    unsigned char slots[l6384/8];
+    // 记录节点负责处理的槽的数量，就是 slots 数组中值为 1 的二进制位数量
+    int numslots;
+}
+```
+
+slots 是一个二进制位数组（bit array），长度为 `16384/8 = 2048` 个字节，包含 16384 个二进制位，Redis 以 0 为起始索引，16383 为终止索引，对 slots 数组的 16384 个二进制位进行编号，并根据索引 i 上的二进制位的值来判断节点是否负责处理槽 i：
+
+* 在索引 i 上的二进制位的值为 1，那么表示节点负责处理槽 i
+* 在索引 i 上的二进制位的值为 0，那么表示节点不负责处理槽 i
+
+![输入图片说明](https://foruda.gitee.com/images/1680253724013247656/72fbcfef_8616658.png "屏幕截图")
+
+取出和设置 slots 数组中的任意一个二进制位的值的**复杂度仅为 O(1)**，所以对于一个给定节点的 slots 数组来说，检查节点是否负责处理某个槽或者将某个槽指派给节点负责，这两个动作的复杂度都是 O(1)
+
+**传播节点的槽指派信息**：一个节点除了会将自己负责处理的槽记录在 clusterNode 中，还会将自己的 slots 数组通过消息发送给集群中的其他节点，每个接收到 slots 数组的节点都会将数组保存到相应节点的 clusterNode 结构里面，因此集群中的**每个节点**都会知道数据库中的 16384 个槽分别被指派给了集群中的哪些节点
+
+
+
+
+
+***
+
+
+
+#### 集群指派
+
+集群状态 clusterState 结构中的 slots 数组记录了集群中所有 16384 个槽的指派信息，数组每一项都是一个指向 clusterNode 的指针
+
+```c
+typedef struct clusterState {
+    // ...
+    clusterNode *slots[16384];
+}
+```
+
+* 如果 slots[i] 指针指向 NULL，那么表示槽 i 尚未指派给任何节点
+* 如果 slots[i] 指针指向一个 clusterNode 结构，那么表示槽 i 已经指派给该节点所代表的节点
+
+通过该节点，程序检查槽 i 是否已经被指派或者取得负责处理槽 i 的节点，只需要访问 clusterState. slots[i] 即可，时间复杂度仅为 O(1)
+
+
+
+***
+
+
+
+#### 集群数据
+
+集群节点保存键值对以及键值对过期时间的方式，与单机 Redis 服务器保存键值对以及键值对过期时间的方式完全相同，但是**集群节点只能使用 0 号数据库**，单机服务器可以任意使用
+
+除了将键值对保存在数据库里面之外，节点还会用 clusterState 结构中的 slots_to_keys 跳跃表来**保存槽和键之间的关系**
+
+```c
+typedef struct clusterState {
+    // ...
+    zskiplist *slots_to_keys;
+}
+```
+
+slots_to_keys 跳跃表每个节点的分值（score）都是一个槽号，而每个节点的成员（member）都是一个数据库键（按槽号升序）
+
+* 当节点往数据库中添加一个新的键值对时，节点就会将这个键以及键的槽号关联到 slots_to_keys 跳跃表
+* 当节点删除数据库中的某个键值对时，节点就会在 slots_to_keys 跳跃表解除被删除键与槽号的关联
+
+![](https://seazean.oss-cn-beijing.aliyuncs.com/img/DB/Redis-槽和键跳跃表.png)
+
+通过在 slots_to_keys 跳跃表中记录各个数据库键所属的槽，可以很方便地对属于某个或某些槽的所有数据库键进行批量操作，比如 `CLUSTER GETKEYSINSLOT <slot> <count>` 命令返回最多 count 个属于槽 slot 的数据库键，就是通过该跳表实现
+
+
 
 ### 集群监控原理
 
@@ -355,6 +899,14 @@ Sentinel如何判断一个redis实例是否健康？
 - 首先选定一个slave作为新的master，执行slaveof no one
 - 然后让所有节点都执行slaveof 新master
 - 修改故障节点配置，添加slaveof 新master
+
+
+
+
+## 集群
+
+***
+
 
 
 ## Redis分片集群

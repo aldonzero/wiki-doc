@@ -7,6 +7,8 @@
   <meta name="description" content="Description">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0">
   <link rel="stylesheet" href="//cdn.jsdelivr.net/npm/docsify@4/lib/themes/vue.css">
+  <link rel="stylesheet" href="/css/mermaid.min.css" />
+
 
 </head>
 <body>
@@ -20,7 +22,7 @@
             // 开启侧边栏，需要目录下有_sidebar.md文件
             loadSidebar: true,
             // 读取md文件中最大几级目录
-            subMaxLevel: 2,
+            subMaxLevel: 3,
             // 切换页面后跳回页面顶部
       name: '',
       repo: '',
@@ -47,6 +49,29 @@
                     label: "切记"
                 }
             },
+	plugins: [
+    function (hook, vm) {
+      hook.ready(function () {
+        mermaid.initialize({ startOnLoad: false });
+      });
+      hook.doneEach(function () {
+        mermaid.init(undefined, '.mermaid');
+      });
+    }
+  ],
+  markdown: {
+    renderer: {
+      code: function (code, lang) {
+        var html = '';
+        if (code.match(/^sequenceDiagram/) || code.match(/^graph/) || code.match(/^gantt/)) {
+          html = '<div class="mermaid">' + code + '</div>';
+        }
+        var hl = Prism.highlight(code, Prism.languages[lang] || Prism.languages.markup);
+        return html + '<pre v-pre data-lang="' + lang + '"><code class="lang-' + lang + '">' + hl + '</code></pre>';
+      }
+    }
+  }
+
 
     }
   </script>
@@ -64,5 +89,9 @@
 <!-- search -->
 <script src="//cdn.jsdelivr.net/npm/docsify/lib/plugins/search.min.js"></script>
 <script src="//cdn.jsdelivr.net/npm/docsify-copy-code/dist/docsify-copy-code.min.js"></script>
+
+<!-- 解析 mermaid -->
+<script type="text/javascript" src="/js/mermaid.min.js"></script>
+
 </body>
 </html>
