@@ -1,7 +1,9 @@
-* [首页](/README)
-* [并发编程](/并发编程)
-  * [线程池面试](/并发编程/线程池面试.md)
-* [redis](redis/)
+- [首页](/README)
+- **Java**
+  - [Java](/java/java)
+  - [JVM](/java/jvm)
+
+* [redis](redis/readme)
   * [redis面试](redis/redis面试题.md)
   * [redis](redis/redis.md)
 * [mysql](/mysql/mysql)

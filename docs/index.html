@@ -8,21 +8,28 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0">
   <link rel="stylesheet" href="//cdn.jsdelivr.net/npm/docsify@4/lib/themes/vue.css">
   <!-- 代码高亮主题 -->
-	<link href="/theme/prism/prism-one-light.css" rel="stylesheet" />
+  <link href="/theme/prism/prism-one-light.css" rel="stylesheet" />
 
+
+<!--  
+<link rel="stylesheet" href="//cdn.jsdelivr.net/npm/docsify-sidebar-collapse/dist/sidebar.min.css" />
+<link rel="stylesheet" href="//cdn.jsdelivr.net/npm/docsify-sidebar-collapse/dist/sidebar-folder.min.css" /> -->
+<style>
+.markdown-section p strong { color: #c80052;}
+</style
 </head>
 <body>
   <div id="app"></div>
   <script>
     window.$docsify = {
-	loadSidebar: true,
+    loadSidebar: true,
+
+	//sidebarDisplayLevel: 1, // set sidebar display level
 	search: 'auto', // 默认值
 	 // 加载自定义导航栏,需要目录下有_navbar.md文件
             loadNavbar: false,
-            // 开启侧边栏，需要目录下有_sidebar.md文件
-            loadSidebar: true,
             // 读取md文件中最大几级目录
-            subMaxLevel: 2,
+            subMaxLevel: 3,
             // 切换页面后跳回页面顶部
       name: '',
       repo: '',
@@ -50,6 +57,8 @@
                 }
             },
 
+
+
     }
   </script>
   <!-- Docsify v4 -->
@@ -66,5 +75,18 @@
 <!-- search -->
 <script src="//cdn.jsdelivr.net/npm/docsify/lib/plugins/search.min.js"></script>
 <script src="//cdn.jsdelivr.net/npm/docsify-copy-code/dist/docsify-copy-code.min.js"></script>
+ <!-- Support for Katex -->
+<script src="/plugins/katex.min.js"></script>
+<link rel="stylesheet" href="//cdn.jsdelivr.net/npm/katex@latest/dist/katex.min.css" />
+<script src="/plugins/marked@4.js"></script>
+
+<!-- CDN files for docsify-katex -->
+<script src="/plugins/docsify-katex.js"></script>
+<!-- or <script src="//cdn.jsdelivr.net/gh/upupming/docsify-katex@latest/dist/docsify-katex.js"></script> -->
+
+
+<!--
+<script src="//cdn.jsdelivr.net/npm/docsify-sidebar-collapse/dist/docsify-sidebar-collapse.min.js"></script>
+-->
 </body>
 </html>
