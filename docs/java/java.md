@@ -21,6 +21,67 @@ HashMap 基于哈希表的 Map 接口实现，是以 `key-value` 存储形式存
 * **key 要存储的是自定义对象，需要重写 hashCode 和 equals 方法，防止出现地址不同内容相同的 key**
 
 > ❓ 在使用集合的时候为什么要重写hashcode和equals方法？
+>
+> HashMap在判断连个key是否相同时的判断逻辑是：
+>
+> ```java
+>  if (e.hash == hash &&((k = e.key) == key || (key != null && key.equals(k))))
+> ```
+>
+> 1. 判断hash值是否相等，即判断hashCode是否相等；如果不相等则两个key不同；
+> 2. hash值相等，判断地址或key值是否相等，对key值判断时使用key对象的equals方法
+>
+> - 如果不重写hashCode，那么即使是具有相同值不同对象的判断结果也是不相等；因为Object提供的hashcode()是一个native方法，每一个对象返回一个不同的整数值，这个值是JVM根据对象地址进行多次计算得出的一个不同值。
+> - 如果不重写eqauls方法，具有相同值不同对象即使是计算的hash值相等，但是对象的地址不相等，而Object提供的equals方法是判断地址是否相等，最终具有相同值的不同key判断结果也是不同的。
+>
+> 综上，如果不重写hashCode方法和equals方法，那么向HashMap中添加元素时，会添加多个具有相同key值的对象，而去根据key值取时则取到对象均为null。
+>
+> equals重写是因为HashMap中的`Node<K,V>`判断键值对对象是否相等使用的是**对象K和对象V自身的equals方法**，如果不重写，就是使用父类Object中的equals方法，这个方法比较逻辑是使用的`==`作为判断，也就是判断两个对象的引用是否相等；具有相同value的不同对象的判断结果肯定是不同的，那么就违反HashMap的设计，即Key是唯一不重复的。
+>
+> hashcode()是一个native方法，每一个对象返回一个不同的整数值，这个值是JVM根据对象地址进行多次计算得出的一个不同值。
+
+
+
+> ❓ 如何重写HashCode()方法？
+>
+> JDK提供的方法：
+>
+> ```java
+> ·Objects.hashCode(Object o)      //return o != null ? o.hashCode() : 0;
+> ·Objects.hash(Object... values) //return Arrays.hashCode(values);  
+> ·Arrays.hashCode(Object[] a) 及其重载方法
+> ·包装器的静态方法 hashCode
+>
+> class User {
+>   int id;
+>   String name;
+>    //重写hashCode详见Objects.hash()方法
+>     @Override
+>     public int hashCode() {
+>         return Objects.hash(id, name);
+>     }
+> }
+> ```
+>
+> Integer的hashCode()直接返回value:
+>
+> ```java
+> public static int hashCode(int value) {
+>     return value;
+> }
+> ```
+>
+> String类的hashCode方法重写和Objects类提供的方法类似，但是Objects提供的方法加的是元素的hashCode。
+>
+> ```java
+> //String中hashCode重写方法关键
+> h = 31 * h + val[i];
+> //Arrays.hashCode(values);
+> result = 31 * result + (element == null ? 0 : element.hashCode());
+> ```
+> 使用因数31是因为31是个不大不小的质数, 能保证乘积有足够的离散率, 并且保证最后的hashCode不至于过大超出int范围，而且`31*h`可以被优化成 `(h << 5) - h`
+
+
 
 JDK7 对比 JDK8：
 
@@ -199,32 +260,32 @@ HashMap 继承关系如下图所示：
 
 11. 调整大小下一个容量的值计算方式为：容量 * 负载因子，容量是数组的长度
 
-       ```java
-       // 临界值，当实际大小(容量*负载因子)超过临界值时，会进行扩容
-       int threshold;
-       ```
+          ​```java
+          // 临界值，当实际大小(容量*负载因子)超过临界值时，会进行扩容
+          int threshold;
+          ​```
 
 12. **哈希表的加载因子**
 
-      ```java
-       final float loadFactor;
-      ```
-
-      * 加载因子的概述
-
-        loadFactor 加载因子，是用来衡量 HashMap 满的程度，表示 HashMap 的疏密程度，影响 hash 操作到同一个数组位置的概率，计算 HashMap 的实时加载因子的方法为 **size/capacity**，而不是占用桶的数量去除以 capacity，capacity 是桶的数量，也就是 table 的长度 length
-
-        当 HashMap 容纳的元素已经达到数组长度的 75% 时，表示 HashMap 拥挤需要扩容，而扩容这个过程涉及到 rehash、复制数据等操作，非常消耗性能，所以开发中尽量减少扩容的次数，通过创建 HashMap 集合对象时指定初始容量来避免
-
-        ```java
-        HashMap(int initialCapacity, float loadFactor)//构造指定初始容量和加载因子的空HashMap
-        ```
-
-      * 为什么加载因子设置为 0.75，初始化临界值是 12？
-
-        loadFactor 太大导致查找元素效率低，存放的数据拥挤，太小导致数组的利用率低，存放的数据会很分散。loadFactor 的默认值为 **0.75f 是官方给出的一个比较好的临界值**
-
-      * threshold 计算公式：capacity（数组长度默认16） * loadFactor（默认 0.75）。当 size >= threshold 的时候，那么就要考虑对数组的 resize（扩容），这就是衡量数组是否需要扩增的一个标准， 扩容后的 HashMap 容量是之前容量的**两倍**
+         ​```java
+          final float loadFactor;
+         ​```
+         
+         * 加载因子的概述
+         
+           loadFactor 加载因子，是用来衡量 HashMap 满的程度，表示 HashMap 的疏密程度，影响 hash 操作到同一个数组位置的概率，计算 HashMap 的实时加载因子的方法为 **size/capacity**，而不是占用桶的数量去除以 capacity，capacity 是桶的数量，也就是 table 的长度 length
+         
+           当 HashMap 容纳的元素已经达到数组长度的 75% 时，表示 HashMap 拥挤需要扩容，而扩容这个过程涉及到 rehash、复制数据等操作，非常消耗性能，所以开发中尽量减少扩容的次数，通过创建 HashMap 集合对象时指定初始容量来避免
+         
+           ```java
+           HashMap(int initialCapacity, float loadFactor)//构造指定初始容量和加载因子的空HashMap
+           ```
+         
+         * 为什么加载因子设置为 0.75，初始化临界值是 12？
+         
+           loadFactor 太大导致查找元素效率低，存放的数据拥挤，太小导致数组的利用率低，存放的数据会很分散。loadFactor 的默认值为 **0.75f 是官方给出的一个比较好的临界值**
+         
+         * threshold 计算公式：capacity（数组长度默认16） * loadFactor（默认 0.75）。当 size >= threshold 的时候，那么就要考虑对数组的 resize（扩容），这就是衡量数组是否需要扩增的一个标准， 扩容后的 HashMap 容量是之前容量的**两倍**
 
 
 ***
@@ -371,24 +432,51 @@ HashMap 继承关系如下图所示：
   putVal() 方法中 key 在这里执行了一下 hash()，在 putVal 函数中使用到了上述 hash 函数计算的哈希值：
 
   ```java
-  final V putVal(int hash, K key, V value, boolean onlyIfAbsent, boolean evict) {
-    	//。。。。。。。。。。。。。。
-    	if ((p = tab[i = (n - 1) & hash]) == null){//这里的n表示数组长度16
-    		//.....
-        } else {
-            if (e != null) { // existing mapping for key
-                V oldValue = e.value;
-                //onlyIfAbsent默认为false，所以可以覆盖已经存在的数据，如果为true说明不能覆盖
-                if (!onlyIfAbsent || oldValue == null)
-                    e.value = value;
-                afterNodeAccess(e);
-                // 如果这里允许覆盖，就直接返回了
-                return oldValue;
-            }
-        }
-      // 如果是添加操作，modCount ++，如果不是替换，不会走这里的逻辑，modCount用来记录逻辑的变化
+  final V putVal(int hash, K key, V value, boolean onlyIfAbsent,
+                 boolean evict) {
+      Node<K,V>[] tab; Node<K,V> p; int n, i;
+    // 1. 如果tab为null或者数组大小为0，就对数组扩容
+      if ((tab = table) == null || (n = tab.length) == 0)
+          n = (tab = resize()).length;
+    // 2. key的hash值和n-1 进行与运算得出在数组中的位置p,如果数组中位置p的对象为null，则直接将node对象放入数组中
+      if ((p = tab[i = (n - 1) & hash]) == null)
+          tab[i] = newNode(hash, key, value, null);
+      else {
+          Node<K,V> e; K k;
+        // 3. 如果数组中位置P的对象不为空，并且与key的hash值相等，则判断key对象引用或者key值是否相等，如果key相等则记录p对象
+          if (p.hash == hash &&
+              ((k = p.key) == key || (key != null && key.equals(k))))
+              e = p;
+        // 判断p是否是树，如果树化，调用红黑树添加元素的方法
+          else if (p instanceof TreeNode)
+              e = ((TreeNode<K,V>)p).putTreeVal(this, tab, hash, key, value);
+          else {
+            //找到链表的尾节点，并记录，如果超出了阈值则对链表进行树化
+              for (int binCount = 0; ; ++binCount) {
+                  if ((e = p.next) == null) {
+                      p.next = newNode(hash, key, value, null);
+                      if (binCount >= TREEIFY_THRESHOLD - 1) // -1 for 1st
+                          treeifyBin(tab, hash);
+                      break;
+                  }
+                  if (e.hash == hash &&
+                      ((k = e.key) == key || (key != null && key.equals(k))))
+                      break;
+                  p = e;
+              }
+          }
+        // 前面e记录不为空，说明已经存在了相同的key，直接替换value
+          if (e != null) { // existing mapping for key
+              V oldValue = e.value;
+              if (!onlyIfAbsent || oldValue == null)
+                  e.value = value;
+              afterNodeAccess(e);
+              return oldValue;
+          }
+      }
+    // 如果是添加操作，值加1，如果是替换操作不会走这个逻辑
       ++modCount;
-      // 数量大于扩容阈值
+    // 插入后map中元素超出阈值，进行扩容
       if (++size > threshold)
           resize();
       afterNodeInsertion(evict);

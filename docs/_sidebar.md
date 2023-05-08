@@ -1,4 +1,5 @@
 - [首页](/README)
+- [面试题](/面试题)
 - **Java**
   - [Java](/java/java)
   - [JVM](/java/jvm)
@@ -14,7 +15,9 @@
 * [netty](/netty)
 
 
-* [http](/http)
+* **计算机网络**
+  * [TCP](/计算机网络/tcp)
+  * [HTTP](/计算机网络/http)
 * [算法](/算法)
 * [操作系统](/操作系统)
 
