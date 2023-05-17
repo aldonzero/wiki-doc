@@ -2595,14 +2595,14 @@ ClassLoader 类常用方法：
 
 ##### 加载机制
 
-在 JVM 中，对于类加载模型提供了三种，分别为全盘加载、双亲委派、缓存机制
+在 JVM 中，对于类加载模型提供了三种，分别为**全盘加载**、**双亲委派**、**缓存机制**。
 
-- **全盘加载：**当一个类加载器负责加载某个 Class 时，该 Class 所依赖和引用的其他 Class 也将由该类加载器负责载入，除非显示指定使用另外一个类加载器来载入
+- **全盘加载：**当一个类加载器负责加载某个 Class 时，该 Class 所**依赖和引用**的其他 Class 也将由该类加载器负责载入，除非显示指定使用另外一个类加载器来载入；
 
-- **双亲委派：**某个特定的类加载器在接到加载类的请求时，首先将加载任务委托给父加载器，**依次递归**，如果父加载器可以完成类加载任务，就成功返回；只有当父加载器无法完成此加载任务时，才自己去加载
+- **双亲委派：**某个特定的类加载器在接到加载类的请求时，首先将加载任务委托给父加载器，**依次递归**，如果父加载器可以完成类加载任务，就成功返回；只有当父加载器无法完成此加载任务时，才自己去加载；
 
-- **缓存机制：**会保证所有加载过的 Class 都会被缓存，当程序中需要使用某个 Class 时，类加载器先从缓存区中搜寻该 Class，只有当缓存区中不存在该 Class 对象时，系统才会读取该类对应的二进制数据，并将其转换成 Class 对象存入缓冲区（方法区）中
-  - 这就是修改了 Class 后，必须重新启动 JVM，程序所做的修改才会生效的原因
+- **缓存机制：**会保证所有加载过的 Class 都会被缓存，当程序中需要使用某个 Class 时，类加载器先从缓存区中搜寻该 Class，只有当缓存区中不存在该 Class 对象时，系统才会读取该类对应的二进制数据，并将其转换成 Class 对象存入缓冲区（方法区）中。
+  - 这就是修改了 Class 后，必须重新启动 JVM，程序所做的修改才会生效的原因。
 
 
 
@@ -2653,17 +2653,17 @@ ClassLoader 类常用方法：
 protected Class<?> loadClass(String name, boolean resolve)
     throws ClassNotFoundException {
     synchronized (getClassLoadingLock(name)) {
-       // 调用当前类加载器的 findLoadedClass(name)，检查当前类加载器是否已加载过指定 name 的类
+       // 1. 调用当前类加载器的 findLoadedClass(name)，检查当前类加载器是否已加载过指定 name 的类
         Class c = findLoadedClass(name);
         
-        // 当前类加载器如果没有加载过
+        // 2. 当前类加载器如果没有加载过
         if (c == null) {
             long t0 = System.nanoTime();
             try {
-                // 判断当前类加载器是否有父类加载器
+                // 3. 判断当前类加载器是否有父类加载器
                 if (parent != null) {
-                    // 如果当前类加载器有父类加载器，则调用父类加载器的 loadClass(name,false)
-         			// 父类加载器的 loadClass 方法，又会检查自己是否已经加载过
+                    // 4. 如果当前类加载器有父类加载器，则调用父类加载器的 loadClass(name,false)
+         			// 5. 父类加载器的 loadClass 方法，又会检查自己是否已经加载过
                     c = parent.loadClass(name, false);
                 } else {
                     // 当前类加载器没有父类加载器，说明当前类加载器是 BootStrapClassLoader
@@ -2701,25 +2701,25 @@ protected Class<?> loadClass(String name, boolean resolve)
 
 ##### 破坏委派
 
-双亲委派模型并不是一个具有强制性约束的模型，而是 Java 设计者推荐给开发者的类加载器实现方式
+双亲委派模型并不是一个具有强制性约束的模型，而是 Java 设计者推荐给开发者的类加载器实现方式。
 
 破坏双亲委派模型的方式：
 
 * 自定义 ClassLoader
 
-  * 如果不想破坏双亲委派模型，只需要重写 findClass 方法
-  * 如果想要去破坏双亲委派模型，需要去**重写 loadClass **方法
+  * 如果不想破坏双亲委派模型，只需要重写 `findClass` 方法；
+  * 如果想要去破坏双亲委派模型，需要去**重写 loadClass **方法。
 
 * 引入**线程上下文类加载器**
 
   Java 提供了很多服务提供者接口（Service Provider Interface，SPI），允许第三方为这些接口提供实现。常见的有 JDBC、JCE、JNDI 等。这些 SPI 接口由 Java 核心库来提供，而 SPI 的实现代码则是作为 Java 应用所依赖的 jar 包被包含进类路径 classpath 里，SPI 接口中的代码需要加载具体的实现类：
 
-  * SPI 的接口是 Java 核心库的一部分，是由引导类加载器来加载的
-  * SPI 的实现类是由系统类加载器加载，引导类加载器是无法找到 SPI 的实现类，因为双亲委派模型中 BootstrapClassloader 无法委派 AppClassLoader 来加载类
+  * SPI 的接口是 Java 核心库的一部分，是由引导类加载器来加载的；
+  * SPI 的实现类是由系统类（程序类）加载器加载，引导类加载器是无法找到 SPI 的实现类，因为双亲委派模型中 BootstrapClassloader 无法委派 AppClassLoader 来加载类；
 
-  JDK 开发人员引入了线程上下文类加载器（Thread Context ClassLoader），这种类加载器可以通过 Thread  类的 setContextClassLoader 方法进行设置线程上下文类加载器，在执行线程中抛弃双亲委派加载模式，使程序可以逆向使用类加载器，使 Bootstrap 加载器拿到了 Application 加载器加载的类，破坏了双亲委派模型
+  JDK 开发人员引入了线程上下文类加载器（Thread Context ClassLoader），这种类加载器可以通过 Thread  类的 setContextClassLoader 方法进行设置线程上下文类加载器，在执行线程中抛弃双亲委派加载模式，使程序可以逆向使用类加载器，使 Bootstrap 加载器拿到了 Application 加载器加载的类，破坏了双亲委派模型。
 
-* 实现程序的动态性，如代码热替换（Hot Swap）、模块热部署（Hot Deployment）
+* 实现程序的动态性，如代码热替换（Hot Swap）、模块热部署（Hot Deployment）。
 
   IBM 公司主导的 JSR一291（OSGiR4.2）实现模块化热部署的关键是它自定义的类加载器机制的实现，每一个程序模块（OSGi 中称为 Bundle）都有一个自己的类加载器，当更换一个 Bundle 时，就把 Bundle 连同类加载器一起换掉以实现代码的热替换，在 OSGi 环境下，类加载器不再双亲委派模型推荐的树状结构，而是进一步发展为更加复杂的网状结构
 
