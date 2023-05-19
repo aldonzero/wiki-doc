@@ -1,3 +1,5 @@
+
+
 ## 集合
 
 ### Map
@@ -260,32 +262,32 @@ HashMap 继承关系如下图所示：
 
 11. 调整大小下一个容量的值计算方式为：容量 * 负载因子，容量是数组的长度
 
-          ​```java
-          // 临界值，当实际大小(容量*负载因子)超过临界值时，会进行扩容
-          int threshold;
-          ​```
+           ​```java
+           // 临界值，当实际大小(容量*负载因子)超过临界值时，会进行扩容
+           int threshold;
+           ​```
 
 12. **哈希表的加载因子**
 
-         ​```java
-          final float loadFactor;
-         ​```
-         
-         * 加载因子的概述
-         
-           loadFactor 加载因子，是用来衡量 HashMap 满的程度，表示 HashMap 的疏密程度，影响 hash 操作到同一个数组位置的概率，计算 HashMap 的实时加载因子的方法为 **size/capacity**，而不是占用桶的数量去除以 capacity，capacity 是桶的数量，也就是 table 的长度 length
-         
-           当 HashMap 容纳的元素已经达到数组长度的 75% 时，表示 HashMap 拥挤需要扩容，而扩容这个过程涉及到 rehash、复制数据等操作，非常消耗性能，所以开发中尽量减少扩容的次数，通过创建 HashMap 集合对象时指定初始容量来避免
-         
-           ```java
-           HashMap(int initialCapacity, float loadFactor)//构造指定初始容量和加载因子的空HashMap
-           ```
-         
-         * 为什么加载因子设置为 0.75，初始化临界值是 12？
-         
-           loadFactor 太大导致查找元素效率低，存放的数据拥挤，太小导致数组的利用率低，存放的数据会很分散。loadFactor 的默认值为 **0.75f 是官方给出的一个比较好的临界值**
-         
-         * threshold 计算公式：capacity（数组长度默认16） * loadFactor（默认 0.75）。当 size >= threshold 的时候，那么就要考虑对数组的 resize（扩容），这就是衡量数组是否需要扩增的一个标准， 扩容后的 HashMap 容量是之前容量的**两倍**
+          ​```java
+           final float loadFactor;
+          ​```
+          
+          * 加载因子的概述
+          
+            loadFactor 加载因子，是用来衡量 HashMap 满的程度，表示 HashMap 的疏密程度，影响 hash 操作到同一个数组位置的概率，计算 HashMap 的实时加载因子的方法为 **size/capacity**，而不是占用桶的数量去除以 capacity，capacity 是桶的数量，也就是 table 的长度 length
+          
+            当 HashMap 容纳的元素已经达到数组长度的 75% 时，表示 HashMap 拥挤需要扩容，而扩容这个过程涉及到 rehash、复制数据等操作，非常消耗性能，所以开发中尽量减少扩容的次数，通过创建 HashMap 集合对象时指定初始容量来避免
+          
+            ```java
+            HashMap(int initialCapacity, float loadFactor)//构造指定初始容量和加载因子的空HashMap
+            ```
+          
+          * 为什么加载因子设置为 0.75，初始化临界值是 12？
+          
+            loadFactor 太大导致查找元素效率低，存放的数据拥挤，太小导致数组的利用率低，存放的数据会很分散。loadFactor 的默认值为 **0.75f 是官方给出的一个比较好的临界值**
+          
+          * threshold 计算公式：capacity（数组长度默认16） * loadFactor（默认 0.75）。当 size >= threshold 的时候，那么就要考虑对数组的 resize（扩容），这就是衡量数组是否需要扩增的一个标准， 扩容后的 HashMap 容量是之前容量的**两倍**
 
 
 ***
