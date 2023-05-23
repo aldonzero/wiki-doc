@@ -1,3 +1,72 @@
+### 关键字
+
+#### default关键字
+
+default关键字的三种用法：
+
+1. `switch`中case没有匹配执行的默认方法；
+
+   ```java
+   switch (a){
+       case 1:
+           System.out.println("a is :" + 1);
+           break;
+       default:
+           System.out.println("The parameter does not conform");
+           break;
+   }
+
+   ```
+
+2. 接口中使用`default`关键字修饰方法，方法必须添加方法体；
+
+   ```java
+   interface IBase {
+       default void fun4(){} 
+   }
+   ```
+
+3. 在注解中指定元素的默认值；
+
+   ```java
+   @Target(ElementType.METHOD)
+   @Retention(RetentionPolicy.RUNTIME)
+   public @interface TestAnnotation {
+     public int id();
+     public String description() default "No description";
+   }
+   ```
+
+   ​
+
+### 抽象类和接口的区别？
+
+JDK1.8比较。
+
+#### 抽象类
+
+抽象类是对一类具有相同特性的事务进行抽象，包括成员和方法；可以作为很多子类的父类，是一种模板模式设计。
+
+**语法：**
+
+1. 抽象类需要使用`abstract`关键字，可以用来修饰类、方法，不能用来修饰变量、代码块、构造器；
+2. `abstract`修饰的方法不能有方法体；
+3. `abstract`不能与`private、static、final、native`关键字联用，因为`abstract`关键字修饰的方法子类需要重写，而`private、static、final、native`关键字修饰的方法是不能被重写的；
+4. 抽象类可以有构造函数，但是不能被实例化；从设计的角度看，抽象类本身是对一类事物的抽象，而实例化是一个具体事物对象，那么抽象类实例化在设计上是不合理的。
+5. 子类只能继承一个父类。
+
+#### 接口
+
+接口是对类的局部行为抽象；在设计层面上是对一类事务行为的规范，是一种辐射设计。
+
+**语法：**
+
+1. 接口使用类使用`interface`修饰；
+2. 接口中除了`static、final`变量，不能包含成员变量，并且变量只能使用不能被修改，因为接口中的变量会被隐式指定为`public static final `变量；
+3. 接口中的方法只能使用`public、default`关键字或者不用关键字修饰方法，使用`default`关键字修饰的方法必须有方法体；
+4. 不可以有构造函数，也不可以实例化；
+5. 实现类可以实现多个接口；
+
 ## 反射
 
 ***
