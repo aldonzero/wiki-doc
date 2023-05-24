@@ -25,21 +25,21 @@ MySQL 支持 ACID 特性，保证可靠性和持久性，读取性能不高，�
 
 ### Redis
 
-Redis (REmote DIctionary Server) ：用 C 语言开发的一个开源的高性能键值对（key-value）数据库
+Redis (REmote DIctionary Server) ：用 C 语言开发的一个开源的高性能的、存储键值对（key-value）的、非关系型数据库。
 
 特征：
 
-* 数据间没有必然的关联关系，**不存关系，只存数据**
-* 数据**存储在内存**，存取速度快，解决了磁盘 IO 速度慢的问题
-* 内部采用**单线程**机制进行工作
-* 高性能，官方测试数据，50 个并发执行 100000 个请求，读的速度是 110000 次/s，写的速度是 81000 次/s
-* 多数据类型支持
-  * 字符串类型：string（String）：数据库分表，建立唯一主键ID
-  * 列表类型：list（LinkedList）
-  * 散列类型：hash（HashMap）：value只能放字符串，最多$2^{32} - 1$对
-  * 集合类型：set（HashSet）
-  * 有序集合类型：zset/sorted_set（TreeSet）
-* 支持持久化，可以进行数据灾难恢复
+* 数据间没有必然的关联关系，**不存关系，只存数据**；
+* 数据**存储在内存**，存取速度快，解决了磁盘 IO 速度慢的问题；
+* 内部采用**单线程**机制进行工作；
+* 高性能，官方测试数据，50 个并发执行 100000 个请求，读的速度是 110000 次/s，写的速度是 81000 次/s；
+* 多数据类型支持：
+  * 字符串类型：string（String）：数据库分表，建立唯一主键ID；
+  * 列表类型：list（LinkedList）；
+  * 散列类型：hash（HashMap）：value只能放字符串，最多$2^{32} - 1$对；
+  * 无序集合类型：set（HashSet）；
+  * 有序集合类型：zset/sorted_set（TreeSet）；
+* 支持持久化，可以进行数据灾难恢复和数据迁移等。
 
 #### 业务类型
  **原始业务功能** 
@@ -112,14 +112,14 @@ save 秒 至少触发多少次修改
 
 #### RDB优点：
 
-- 适合大规模的数据恢复
-- 对数据完整性和一致性要求不高更适合使用
-- 节省磁盘空间
-- 恢复速度快
+- 适合大规模的数据恢复；
+- 对数据完整性和一致性要求不高更适合使用；
+- 节省磁盘空间；
+- 恢复速度快。
 
 #### RDB缺点：
 
-- RDB在间隔期间备份数据，如果在达到间隔期间条件Redis意外dowm掉，最后一次快照备份数据可能会丢失一部分。
+- RDB在间隔期间备份数据，如果在间隔期间条件Redis意外宕机，最后一次快照备份数据可能会丢失一部分；
 - 如果数据集很大，fork（） 可能会很耗时，如果数据集非常大且 CPU 性能不是很好，则可能会导致 Redis 停止为客户端提供服务几毫秒甚至一秒钟。
 
 ### AOF
@@ -142,15 +142,15 @@ AOF采用文件追加方式，文件会越来越大，为避免出现此种情�
 
 为解决AOF文件越来越大问题，会重建一个当前AOF文件的体积优化版本。即使`bgrewriteaod`执行失败，也不会有任何数据丢失，因为旧的AOF文件在`bgrewriteaof`成功之前不会被修改。
 
-AOF重写会由Rdis自动触发（当前文件是上次文件大小的2倍，且大于64M），`bgrewriteaof`仅用于手动触发重写操作。
+AOF重写会由Rdis自动触发（**当前文件是上次文件大小的2倍，且大于64M**），`bgrewriteaof`仅用于手动触发重写操作。
 
 **重写流程**
 
-- 触发重写，判断是否当前有bgsave或bgrewriteaof在运行，如果有，则等待该命令结束后再继续执行
+- 触发重写，判断是否当前有bgsave或bgrewriteaof在运行，如果有，则等待该命令结束后再继续执行；
 - 主进程fork出子进程执行重写操作，保证主进程不会阻塞
-- 子进程遍历redis内存中数据到临时文件，客户端的写请求同时写入aof_buf缓冲区和aof_rewrite_buf重写缓冲区保证原AOF文件完整以及新AOF文件生成期间的新的数据修改动作不会丢失。
-- 1).子进程写完新的AOF文件后，向主进程发信号，父进程更新统计信息。2).主进程把aof_rewrite_buf中的数据写入到新的AOF文件。
-- 使用新的AOF文件覆盖旧的AOF文件，完成AOF重写
+- 子进程遍历redis内存中数据到临时文件，客户端的写请求同时写入aof_buf缓冲区和aof_rewrite_buf重写缓冲区保证原AOF文件完整以及新AOF文件生成期间的新的数据修改动作不会丢失；
+- 1).子进程写完新的AOF文件后，向主进程发信号，父进程更新统计信息。2).主进程把aof_rewrite_buf中的数据写入到新的AOF文件；
+- 使用新的AOF文件覆盖旧的AOF文件，完成AOF重写。
 
 ![aof重写流程](https://foruda.gitee.com/images/1678258446218040143/f58fe3a1_8616658.png "屏幕截图")
 
@@ -173,7 +173,9 @@ AOF缺点：
 
 单节点Redis的并发能力是有上限的，要进一步提高Redis的并发能力，就需要搭建主从集群，实现读写分离。
 
-![输入图片说明](https://foruda.gitee.com/images/1678261296829843713/b59f54f8_8616658.png "屏幕截图")
+<img src="https://foruda.gitee.com/images/1678261296829843713/b59f54f8_8616658.png" style="zoom: 67%;" />
+
+
 
 ### 主从同步原理
 
@@ -181,7 +183,7 @@ AOF缺点：
 
 主从第一次建立连接时，会执行**全量同步**，将master节点的所有数据都拷贝给slave节点，流程：
 
-![输入图片说明](https://foruda.gitee.com/images/1678261437831226624/dbe75a1d_8616658.png "屏幕截图")
+<img src="https://foruda.gitee.com/images/1678261437831226624/dbe75a1d_8616658.png" style="zoom: 67%;" />
 
 master如何得知salve是第一次来连接呢？
 
@@ -202,7 +204,9 @@ master会将自己的replid和offset都发送给这个slave，slave保存这些�
 
 因此，**master判断一个节点是否是第一次同步的依据，就是看replid是否一致**。
 
-![输入图片说明](https://foruda.gitee.com/images/1678261775340226039/0ecd0546_8616658.png "屏幕截图")
+<img src="https://foruda.gitee.com/images/1678261775340226039/0ecd0546_8616658.png" style="zoom: 67%;" />
+
+
 
 完整流程描述：
 
@@ -216,6 +220,8 @@ master会将自己的replid和offset都发送给这个slave，slave保存这些�
 #### 增量同步
 
 全量同步需要先做RDB，然后将RDB文件通过网络传输个slave，成本太高了。因此除了第一次做全量同步，其它大多数时候slave与master都是做**增量同步**。
+
+<img src="" style="zoom: 67%;" />
 
 ![输入图片说明](https://foruda.gitee.com/images/1678262185509338654/45d765bc_8616658.png "屏幕截图")
 
@@ -239,7 +245,7 @@ repl_baklog中会记录Redis处理过的命令日志及offset，包括master当�
 
 - 棕色框中的红色部分，就是尚未同步，但是却已经被覆盖的数据。此时如果slave恢复，需要同步，却发现自己的offset都没有了，无法完成增量同步了。只能做全量同步。
 
-  ​
+  <img src="" style="zoom: 67%;" />
 
 ![输入图片说明](https://foruda.gitee.com/images/1678263165965238439/8d8319ba_8616658.png "屏幕截图")
 
@@ -257,6 +263,8 @@ repl_baklog中会记录Redis处理过的命令日志及offset，包括master当�
 - 限制一个master上的slave节点数量，如果实在是太多slave，则可以采用主-从-从链式结构，减少master压力
 
 主从从架构图：
+
+<img src="" style="zoom: 67%;" />
 
 ![输入图片说明](https://foruda.gitee.com/images/1678263841456229983/4ae13c51_8616658.png "屏幕截图")
 
@@ -351,7 +359,7 @@ Sentinel 状态中的 masters 字典记录了所有被 Sentinel 监视的主服�
 
 ***
 
-
+<img src="" style="zoom: 67%;" />
 
 ![输入图片说明](https://foruda.gitee.com/images/1680252806934441821/9d126d94_8616658.png "屏幕截图")
 
@@ -602,6 +610,8 @@ Sentinel 集群至少 3 个节点的原因：
 
 示例：sever1 是主，sever2、sever3、sever4 是从服务器，sever1 故障后选中 sever2 升级
 
+<img src="" style="zoom: 67%;" />
+
 ![输入图片说明](https://foruda.gitee.com/images/1680251637655239274/608a310b_8616658.png "屏幕截图")
 
 
@@ -637,6 +647,8 @@ Redis 集群是 Redis 提供的分布式数据库方案，集群通过分片（s
 一个节点就是一个**运行在集群模式下的 Redis 服务器**，Redis 在启动时会根据配置文件中的 `cluster-enabled` 配置选项是否为 yes 来决定是否开启服务器的集群模式
 
 节点会继续使用所有在单机模式中使用的服务器组件，使用 redisServer 结构来保存服务器的状态，使用 redisClient 结构来保存客户端的状态，也有集群特有的数据结构
+
+<img src="" style="zoom: 67%;" />
 
 ![输入图片说明](https://foruda.gitee.com/images/1680253055667759249/2e809585_8616658.png "屏幕截图")
 
@@ -731,6 +743,7 @@ CLUSTER MEET <ip> <port>
 * 节点 B 收到 MEET 消息后，节点 B 会为节点 A 创建一个 clusterNode 结构，并将该结构添加到自己的 clusterState.nodes 字典里，之后节点 B 将向节点 A **返回一条 PONG 消息**
 * 节点 A 收到 PONG 消息后，代表节点 A 可以知道节点 B 已经成功地接收到了自已发送的 MEET 消息，此时节点 A 将向节点 B **返回一条 PING 消息**
 * 节点 B 收到 PING 消息后， 代表节点 B 可以知道节点 A 已经成功地接收到了自己返回的 PONG 消息，握手完成
+* <img src="" style="zoom: 67%;" />
 
 ![输入图片说明](https://foruda.gitee.com/images/1680254124558376003/6036cf7c_8616658.png "屏幕截图")
 
@@ -788,6 +801,8 @@ slots 是一个二进制位数组（bit array），长度为 `16384/8 = 2048` �
 * 在索引 i 上的二进制位的值为 1，那么表示节点负责处理槽 i
 * 在索引 i 上的二进制位的值为 0，那么表示节点不负责处理槽 i
 
+<img src="" style="zoom: 67%;" />
+
 ![输入图片说明](https://foruda.gitee.com/images/1680253724013247656/72fbcfef_8616658.png "屏幕截图")
 
 取出和设置 slots 数组中的任意一个二进制位的值的**复杂度仅为 O(1)**，所以对于一个给定节点的 slots 数组来说，检查节点是否负责处理某个槽或者将某个槽指派给节点负责，这两个动作的复杂度都是 O(1)
@@ -842,6 +857,8 @@ slots_to_keys 跳跃表每个节点的分值（score）都是一个槽号，而�
 * 当节点往数据库中添加一个新的键值对时，节点就会将这个键以及键的槽号关联到 slots_to_keys 跳跃表
 * 当节点删除数据库中的某个键值对时，节点就会在 slots_to_keys 跳跃表解除被删除键与槽号的关联
 
+<img src="" style="zoom: 67%;" />
+
 ![](https://seazean.oss-cn-beijing.aliyuncs.com/img/DB/Redis-槽和键跳跃表.png)
 
 通过在 slots_to_keys 跳跃表中记录各个数据库键所属的槽，可以很方便地对属于某个或某些槽的所有数据库键进行批量操作，比如 `CLUSTER GETKEYSINSLOT <slot> <count>` 命令返回最多 count 个属于槽 slot 的数据库键，就是通过该跳表实现
@@ -855,6 +872,8 @@ Sentinel基于心跳机制监测服务状态，每隔1秒向集群的每个实�
 •主观下线：如果某sentinel节点发现某实例未在规定时间响应，则认为该实例**主观下线**。
 
 •客观下线：若超过指定数量（quorum）的sentinel都认为该实例主观下线，则该实例**客观下线**。quorum值最好超过Sentinel实例数量的一半。
+
+<img src="" style="zoom: 67%;" />
 
 ![输入图片说明](https://foruda.gitee.com/images/1678265187954575712/4b4ec4a1_8616658.png "屏幕截图")
 
@@ -876,6 +895,8 @@ Sentinel基于心跳机制监测服务状态，每隔1秒向集群的每个实�
 - sentinel给备选的slave1节点发送slaveof no one命令，让该节点成为master
 - sentinel给所有其它slave发送slaveof 192.168.150.101 7002 命令，让这些slave成为新master的从节点，开始从新的master上同步数据。
 - 最后，sentinel将故障节点标记为slave，当故障节点恢复后会自动成为新的master的slave节点
+
+<img src="" style="zoom: 67%;" />
 
 ![输入图片说明](https://foruda.gitee.com/images/1678265642741275034/2788acf3_8616658.png "屏幕截图")
 
@@ -923,6 +944,8 @@ Sentinel如何判断一个redis实例是否健康？
 - 高并发写的问题。
 
 使用分片集群可以解决上述问题，如图:
+
+<img src="" style="zoom: 67%;" />
 
 ![分片集群](https://foruda.gitee.com/images/1678326981303066349/3407b63e_8616658.png "屏幕截图")
 
@@ -1005,6 +1028,8 @@ redis.do(command)
 
 传统的缓存策略一般是请求到达Tomcat后，先查询Redis，如果未命中则查询数据库，如图：
 
+<img src="" style="zoom: 67%;" />
+
 ![输入图片说明](https://foruda.gitee.com/images/1678329581500169061/43c5dc43_8616658.png "屏幕截图")
 
 存在下面的问题：
@@ -1022,6 +1047,8 @@ redis.do(command)
 - 如果Redis查询未命中，则查询Tomcat
 - 请求进入Tomcat后，优先查询JVM进程缓存
 - 如果JVM进程缓存未命中，则查询数据库
+
+<img src="" style="zoom: 67%;" />
 
 ![输入图片说明](https://foruda.gitee.com/images/1678329907171655306/c6108864_8616658.png "屏幕截图")
 
@@ -1095,6 +1122,10 @@ C语言字符串存在很多问题：
 - 非二进制安全
 - 不可修改
 
+<img src="" style="zoom: 67%;" />
+
+<img src="" style="zoom: 67%;" />
+
 ![输入图片说明](https://foruda.gitee.com/images/1678435436062038115/eeb9a5e0_8616658.png "屏幕截图")
 
 ![输入图片说明](https://foruda.gitee.com/images/1678331103330434537/88fe3858_8616658.png "屏幕截图")
@@ -1125,7 +1156,7 @@ typedef struct intset {
 }
 ```
 
-
+<img src="" style="zoom: 67%;" />
 
 ![输入图片说明](https://foruda.gitee.com/images/1678331419171305735/2ec42e06_8616658.png "屏幕截图")
 
@@ -1148,6 +1179,8 @@ Inset的特点：
 Dict由三部分组成，分别是：哈希表（DictHashTable）、哈希节点（DictEntry）、字典（Dict）
 
 向Dict添加键值对时，Redis首先根据key计算出hash值（h），然后利用 h & sizemask来计算元素应该存储到数组中的哪个索引位置。我们存储k1=v1，假设k1的哈希值h =1，则1&3 =1，因此k1=v1要存储到数组角标1位置。
+
+<img src="" style="zoom: 67%;" />
 
 ![输入图片说明](https://foruda.gitee.com/images/1678439549994842990/5438a42b_8616658.png "屏幕截图")
 
@@ -1175,6 +1208,8 @@ Dict在每次新增键值对时都会检查负载因子（LoadFactor = used/size
 
 整个过程可以描述成：
 
+<img src="" style="zoom: 67%;" />
+
 ![输入图片说明](https://foruda.gitee.com/images/1678671113227856232/23928845_8616658.png "屏幕截图")
 
 总结：
@@ -1197,6 +1232,8 @@ Dict的伸缩：
 
 ZipList 是一种特殊的“双端链表” ，由一系列特殊编码的连续内存块组成。可以在任意一端进行压入/弹出操作, 并且该操作的时间复杂度为 O(1)。
 
+<img src="" style="zoom: 67%;" />
+
 ![输入图片说明](https://foruda.gitee.com/images/1678671228635533987/00930a2d_8616658.png "屏幕截图")
 
 
@@ -1217,6 +1254,8 @@ ZipList 是一种特殊的“双端链表” ，由一系列特殊编码的连�
 
 ZipList 中的Entry并不像普通链表那样记录前后节点的指针，因为记录两个指针要占用16个字节，浪费内存。而是采用了下面的结构：
 
+<img src="" style="zoom: 67%;" />
+
 ![输入图片说明](https://foruda.gitee.com/images/1678672452202874427/7a112a0f_8616658.png "屏幕截图")
 
 
@@ -1235,6 +1274,8 @@ ZipList的每个Entry都包含previous_entry_length来记录上一个节点的�
 如果前一节点的长度小于254字节，则采用1个字节来保存这个长度值
 如果前一节点的长度大于等于254字节，则采用5个字节来保存这个长度值，第一个字节为0xfe，后四个字节才是真实长度数据
 现在，假设我们有N个连续的、长度为250~253字节之间的entry，因此entry的previous_entry_length属性用1个字节即可表示，如图所示：
+
+<img src="" style="zoom: 67%;" />
 
 ![输入图片说明](https://foruda.gitee.com/images/1678673355987556423/ca2bff32_8616658.png "屏幕截图")
 
@@ -1265,6 +1306,8 @@ ZipList这种特殊情况下产生的连续多次空间扩展操作称之为连�
 
 ​	答：Redis在3.2版本引入了新的数据结构QuickList，它是一个双端链表，只不过链表中的每个节点都是一个ZipList。
 
+<img src="" style="zoom: 67%;" />
+
 ![输入图片说明](https://foruda.gitee.com/images/1678673528759834449/e4b2df2a_8616658.png "屏幕截图")
 
 
@@ -1284,6 +1327,8 @@ SkipList（跳表）首先是链表，但与传统链表相比有几点差异：
 元素按照升序排列存储
 节点可能包含多个指针，指针跨度不同。
 
+<img src="" style="zoom: 67%;" />
+
 ![输入图片说明](https://foruda.gitee.com/images/1678673594375370078/d512dee7_8616658.png "屏幕截图")
 
 SkipList（跳表）首先是链表，但与传统链表相比有几点差异：
@@ -1298,6 +1343,8 @@ Redis中的任意数据类型的键和值都会被封装为一个RedisObject，�
 从Redis的使用者的角度来看，⼀个Redis节点包含多个database（非cluster模式下默认是16个，cluster模式下只能是1个），而一个database维护了从key space到object space的映射关系。这个映射关系的key是string类型，⽽value可以是多种数据类型，比如：
 string, list, hash、set、sorted set等。我们可以看到，key的类型固定是string，而value可能的类型是多个。
 ⽽从Redis内部实现的⾓度来看，database内的这个映射关系是用⼀个dict来维护的。dict的key固定用⼀种数据结构来表达就够了，这就是动态字符串sds。而value则比较复杂，为了在同⼀个dict内能够存储不同类型的value，这就需要⼀个通⽤的数据结构，这个通用的数据结构就是robj，全名是redisObject。
+
+<img src="" style="zoom: 67%;" />
 
 ![输入图片说明](https://foruda.gitee.com/images/1678674941202350797/811db118_8616658.png "屏幕截图")
 
@@ -1400,6 +1447,8 @@ Linux系统为了提高IO效率，会在用户空间和内核空间都加入缓�
 
 用户在读写数据时，会去向内核态申请，想要读取内核的数据，而内核数据要去等待驱动程序从硬件上读取数据，当从磁盘上加载到数据之后，内核会将数据写入到内核的缓冲区中，然后再将数据拷贝到用户态的buffer中，然后再返回给应用程序，整体而言，速度慢。
 
+<img src="" style="zoom: 67%;" />
+
 ![输入图片说明](https://foruda.gitee.com/images/1678756983655323440/74aecddb_8616658.png "屏幕截图")
 
 
@@ -1416,9 +1465,13 @@ Linux系统为了提高IO效率，会在用户空间和内核空间都加入缓�
 
 应用程序想要去读取数据，他是无法直接去读取磁盘数据的，他需要先到内核里边去等待内核操作硬件拿到数据，这个过程就是1，是需要等待的，等到内核从磁盘上把数据加载出来之后，再把这个数据写给用户的缓存区，这个过程是2，如果是阻塞IO，那么整个过程中，用户从发起读请求开始，一直到读取到数据，都是一个阻塞状态。
 
+<img src="" style="zoom: 67%;" />
+
 ![输入图片说明](https://foruda.gitee.com/images/1678757564451956817/4f529abe_8616658.png "屏幕截图")
 
 阻塞IO就是两个阶段都必须阻塞等待，用户去读取数据时，会去先发起recvform一个命令，去尝试从内核上加载数据，如果内核没有数据，那么用户就会等待，此时内核会去从硬件上读取数据，内核读取数据之后，会把数据拷贝到用户态，并且返回ok，整个过程，都是阻塞等待的，这就是阻塞IO。
+
+<img src="" style="zoom: 67%;" />
 
 ![输入图片说明](https://foruda.gitee.com/images/1678757658985043712/96db5034_8616658.png "屏幕截图")
 
@@ -1442,6 +1495,8 @@ Linux系统为了提高IO效率，会在用户空间和内核空间都加入缓�
 - 拷贝过程中，用户进程依然阻塞等待
 - 拷贝完成，用户进程解除阻塞，处理数据
 - 可以看到，非阻塞IO模型中，用户进程在第一个阶段是非阻塞，第二个阶段是阻塞状态。虽然是非阻塞，但性能并没有得到提高。而且忙等机制会导致CPU空转，CPU使用率暴增。
+
+<img src="" style="zoom: 67%;" />
 
 ![输入图片说明](https://foruda.gitee.com/images/1678757784116346023/8168e0de_8616658.png "屏幕截图")
 
@@ -1479,6 +1534,8 @@ Linux系统为了提高IO效率，会在用户空间和内核空间都加入缓�
 - 用户进程处理数据
 
 当用户去读取数据的时候，不再去直接调用recvfrom了，而是调用select的函数，select函数会将需要监听的数据交给内核，由内核去检查这些数据是否就绪了，如果说这个数据就绪了，就会通知应用程序数据就绪，然后来读取数据，再从内核中把数据拷贝给用户态，完成数据处理，如果N多个FD一个都没处理完，此时就进行等待。
+
+<img src="" style="zoom: 67%;" />
 
 ![输入图片说明](https://foruda.gitee.com/images/1678761671034642237/5c8b7626_8616658.png "屏幕截图")
 
@@ -1526,6 +1583,8 @@ IO流程：
 - 内核将数据拷贝到用户空间
 - 用户进程处理数据
 
+<img src="" style="zoom: 67%;" />
+
 ![输入图片说明](https://foruda.gitee.com/images/1678762897804968824/081d3f44_8616658.png "屏幕截图")
 
 当有大量IO操作时，信号较多，SIGIO处理函数不能及时处理可能导致信号队列溢出，而且内核空间与用户空间的频繁信号交互性能也较低。
@@ -1533,6 +1592,8 @@ IO流程：
 ### 异步IO
 
 由内核将所有数据处理完成后，由内核将数据写入到用户态中，然后才算完成，所以性能极高，不会有任何阻塞，全部都由内核完成，可以看到，异步IO模型中，用户进程在两个阶段都是非阻塞状态。
+
+<img src="" style="zoom: 67%;" />
 
 ![输入图片说明](https://foruda.gitee.com/images/1678763732855927303/2939d96b_8616658.png "屏幕截图")
 
@@ -1552,6 +1613,8 @@ IO流程：
 - 抛开持久化不谈，Redis是纯  内存操作，执行速度非常快，它的性能瓶颈是网络延迟而不是执行速度，因此多线程并不会带来巨大的性能提升。
 - 多线程会导致过多的上下文切换，带来不必要的开销
 - 引入多线程会面临线程安全问题，必然要引入线程锁这样的安全手段，实现复杂度增高，而且性能也会大打折扣
+
+<img src="" style="zoom: 67%;" />
 
 ![输入图片说明](https://foruda.gitee.com/images/1678764140650862492/ee95bf76_8616658.png "屏幕截图")
 
