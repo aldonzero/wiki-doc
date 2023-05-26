@@ -1,3 +1,35 @@
+## 面试题
+
+##### [JVM内存结构](#内存结构)
+
+##### [OOM是什么？如何排查？](#)
+
+除了程序计数器外，其他内存区域都有OOM的风险。
+
+- 栈一般会发生`StackOverflowException`，如，32位的Windows系统单进程限制2G，无限制创建进程会发生栈的OOM；
+- Java8常量池移到堆中，溢出会发生`java.lang.OutOfMemoryError:Java heap space`，设置最大元空间大小参数无效；
+- 堆内存溢出，也会发生`java.lang.OutOfMemoryError:Java heap space`，是GC之后无法在堆内存空间中申请内存创建对象；
+- 方法区OOM，经常会动态生成大量的类、jsp等；
+- 直接内存OOM，涉及到`-XX:MaxDirectMemorySize`参数和`Unsafe`对象对内存的申请。
+
+排查OOM的方法：
+
+- 配置参数`-XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/tmp/heapdump.hprof`，当OOM时会自动dump堆内存信息到指定目录；
+- `jstat`查看监控的JVM内存和GC情况，先观察大概出现在什么区域；
+- 使用MAT工具加入dump文件，分析大对象占用情况，比如HashMap做缓存未清理，时间长了就会内存溢出，可以改为弱引用。
+
+##### [如何判断一个对象是否存活？](#垃圾判断)
+
+##### [可达性算法不可达的对象就一定会死亡，会被回收吗？](#垃圾判断)
+
+##### [强引用、软引用、弱引用、虚引用是什么？有什么区别？](#引用分析)
+
+##### [垃圾回收算法有哪些？](#回收算法)
+
+##### [有哪几种垃圾回收器？各自有什么优点？](#垃圾回收器)
+
+##### [Minor GC 和 Full GC有什么不同？](#分代思想)
+
 ## JVM概述
 
 ### 基本介绍
@@ -20,7 +52,7 @@ JVM、JRE、JDK 对比：
 * JDK(Java SE Development Kit)：Java 标准开发包，提供了编译、运行 Java 程序所需的各种工具和资源
 * JRE( Java Runtime Environment)：Java 运行环境，用于解释执行 Java 的字节码文件
 
-<img src="https://seazean.oss-cn-beijing.aliyuncs.com/img/Java/JVM-JRE关系.png" style="zoom: 80%;" />
+<img src="https://foruda.gitee.com/images/1685092083266947052/3e227303_8616658.png" style="zoom: 80%;" />
 
 
 
@@ -87,7 +119,10 @@ JVM 的生命周期分为三个阶段，分别为：启动、运行、死亡
 JVM 内存结构规定了 Java 在运行过程中内存申请、分配、管理的策略，保证了 JVM 的高效稳定运行
 
 * Java1.8 以前的内存结构图：
-  ![](https://seazean.oss-cn-beijing.aliyuncs.com/img/Java/JVM-Java7内存结构图.png)
+
+  <img src="https://foruda.gitee.com/images/1685092131354998066/e7b5d91d_8616658.png" style="zoom: 57%;" />
+
+  ​
 
 * Java1.8 之后的内存结果图：
 
@@ -268,7 +303,7 @@ JNI：Java Native Interface，通过使用 Java 本地接口程序，可以确�
 * dlopen 函数：Linux 系统加载和链接共享库
 * dlclose 函数：卸载共享库
 
-<img src="https://seazean.oss-cn-beijing.aliyuncs.com/img/Java/JVM-本地方法栈.png" style="zoom:67%;" />
+<img src="https://foruda.gitee.com/images/1685092297169372866/4b82b5d1_8616658.png" style="zoom:67%;" />
 
 
 
@@ -569,7 +604,7 @@ TLAB：Thread Local Allocation Buffer，为**每个线程**在**堆**内单独�
 >
 >  不一定，因为还有 TLAB，在堆中划分出一块区域，为每个线程所独占
 
-![输入图片说明](https://foruda.gitee.com/images/1681697258813647236/ec1c1724_8616658.png "屏幕截图")
+<img src="https://foruda.gitee.com/images/1681697258813647236/ec1c1724_8616658.png" style="zoom:67%;" />
 
 JVM 是将 TLAB 作为内存分配的首选，但不是所有的对象实例都能够在 TLAB 中成功分配内存，一旦对象在 TLAB 空间分配内存失败时，JVM 就会通过**使用加锁机制确保数据操作的原子性**，从而直接在堆中分配内存。
 
@@ -582,7 +617,7 @@ JVM 是将 TLAB 作为内存分配的首选，但不是所有的对象实例都�
 * `-XX:TLABWasteTargetPercent`：设置 TLAB 空间所占用 Eden 空间的百分比大小，默认情况下 TLAB 空间的内存非常小，仅占有整个 Eden 空间的1%。
 * `-XX:TLABRefillWasteFraction`：指当 TLAB 空间不足，请求分配的对象内存大小超过此阈值时不会进行 TLAB 分配，直接进行堆内存分配，否则还是会优先进行 TLAB 分配。
 
-![输入图片说明](https://foruda.gitee.com/images/1680663039323431352/63014be8_8616658.png "屏幕截图")
+<img src="https://foruda.gitee.com/images/1680663039323431352/63014be8_8616658.png" style="zoom:67%;" />
 
 
 
@@ -881,7 +916,7 @@ public void localvarGC4() {
   }
   ```
 
-![](https://seazean.oss-cn-beijing.aliyuncs.com/img/Java/JVM-循环引用.png)
+<img src="https://foruda.gitee.com/images/1685092461072162975/8967c1a2_8616658.png" style="zoom:67%;" />
 
 
 
@@ -926,7 +961,7 @@ GC Roots 对象：
 
 - 在可达性分析算法中，只有能够被根对象集合直接或者间接连接的对象才是存活对象
 
-  <img src="https://seazean.oss-cn-beijing.aliyuncs.com/img/Java/JVM-可达性分析算法.png" style="zoom: 50%;" />
+  <img src="https://foruda.gitee.com/images/1685092514660702245/5a3674eb_8616658.png" style="zoom: 50%;" />
 
 
 ***
@@ -974,7 +1009,7 @@ GC Roots 对象：
 * 针对并发标记开始后的**新对象**，通常的做法是直接全部当成黑色，也算浮动垃圾
 * 浮动垃圾并不会影响应用程序的正确性，只是需要等到下一轮垃圾回收中才被清除
 
-<img src="https://seazean.oss-cn-beijing.aliyuncs.com/img/Java/JVM-三色标记法多标情况.png" style="zoom: 50%;" />
+<img src="https://foruda.gitee.com/images/1685092755386470375/2091e359_8616658.png" style="zoom: 50%;" />
 
 **漏标情况：**
 
@@ -982,7 +1017,7 @@ GC Roots 对象：
 * 条件二：其他线程中修改了黑色对象，插入了一条或多条对该白色对象的新引用
 * 结果：导致该白色对象当作垃圾被 GC，影响到了程序的正确性
 
-<img src="https://seazean.oss-cn-beijing.aliyuncs.com/img/Java/JVM-三色标记法漏标情况.png" style="zoom:50%;" />
+<img src="https://foruda.gitee.com/images/1685092900613483554/b061fc16_8616658.png" style="zoom:50%;" />
 
 代码角度解释漏标：
 
@@ -1172,31 +1207,7 @@ Java 语言提供了对象终止（finalization）机制来允许开发人员**�
 
 ## 回收算法
 
-### 复制算法
-
-复制算法的核心就是，**将原有的内存空间一分为二，每次只用其中的一块**，在垃圾回收时，将正在使用的对象复制到另一个内存空间中，然后将该内存空间清理，交换两个内存的角色，完成垃圾的回收
-
-应用场景：如果内存中的垃圾对象较多，需要复制的对象就较少，这种情况下适合使用该方式并且效率比较高，反之则不适合
-
-![](https://seazean.oss-cn-beijing.aliyuncs.com/img/Java/JVM-复制算法.png)
-
-算法优点：
-
-- 没有标记和清除过程，实现简单，运行速度快
-- 复制过去以后保证空间的连续性，不会出现碎片问题
-
-算法缺点：
-
-- 主要不足是**只使用了内存的一半**
-- 对于 G1 这种分拆成为大量 region 的 GC，复制而不是移动，意味着 GC 需要维护 region 之间对象引用关系，不管是内存占用或者时间开销都不小
-
-现在的商业虚拟机都采用这种收集算法**回收新生代**，因为新生代 GC 频繁并且对象的存活率不高，但是并不是划分为大小相等的两块，而是一块较大的 Eden 空间和两块较小的 Survivor 空间
-
-
-
 ***
-
-
 
 ### 标记清除
 
@@ -1212,7 +1223,7 @@ Java 语言提供了对象终止（finalization）机制来允许开发人员**�
 - 标记和清除过程效率都不高
 - 会产生大量不连续的内存碎片，导致无法给大对象分配内存，需要维护一个空闲链表
 
-<img src="https://seazean.oss-cn-beijing.aliyuncs.com/img/Java/JVM-标记清除算法.png" style="zoom: 67%;" />
+<img src="https://foruda.gitee.com/images/1685091453294330212/326ee1ea_8616658.png" style="zoom: 67%;" />
 
 
 
@@ -1230,7 +1241,31 @@ Java 语言提供了对象终止（finalization）机制来允许开发人员**�
 
 缺点：需要移动大量对象，处理效率比较低
 
-<img src="https://seazean.oss-cn-beijing.aliyuncs.com/img/Java/JVM-标记整理算法.png" style="zoom:67%;" />
+<img src="https://foruda.gitee.com/images/1685091557042577953/d5f98db5_8616658.png" style="zoom:67%;" />
+
+***
+
+### 复制算法
+
+复制算法的核心就是，**将原有的内存空间一分为二，每次只用其中的一块**，在垃圾回收时，将正在使用的对象复制到另一个内存空间中，然后将该内存空间清理，交换两个内存的角色，完成垃圾的回收
+
+应用场景：如果内存中的垃圾对象较多，需要复制的对象就较少，这种情况下适合使用该方式并且效率比较高，反之则不适合
+
+<img src="https://foruda.gitee.com/images/1685091348823991150/fe392e27_8616658.png" style="zoom: 67%;" />
+
+算法优点：
+
+- 没有标记和清除过程，实现简单，运行速度快
+- 复制过去以后保证空间的连续性，不会出现碎片问题
+
+算法缺点：
+
+- 主要不足是**只使用了内存的一半**
+- 对于 G1 这种分拆成为大量 region 的 GC，复制而不是移动，意味着 GC 需要维护 region 之间对象引用关系，不管是内存占用或者时间开销都不小
+
+现在的商业虚拟机都采用这种收集算法**回收新生代**，因为新生代 GC 频繁并且对象的存活率不高，但是并不是划分为大小相等的两块，而是一块较大的 Eden 空间和两块较小的 Survivor 空间
+
+**回收算法比较：**
 
 |      | Mark-Sweep | Mark-Compact | Copying               |
 | ---- | ---------- | ------------ | --------------------- |
@@ -1309,7 +1344,7 @@ Serial：**串行**垃圾收集器，作用于**新生代**，是指使用**单�
 
 开启参数：`-XX:+UseSerialGC` 等价于新生代用 Serial GC 且老年代用 Serial old GC
 
-![](https://seazean.oss-cn-beijing.aliyuncs.com/img/Java/JVM-Serial收集器.png)
+![](https://foruda.gitee.com/images/1685093051188379874/eef19911_8616658.png)
 
 优点：简单而高效（与其他收集器的单线程比），对于限定单个 CPU 的环境来说，Serial 收集器由于没有线程交互的开销，可以获得最高的单线程收集效率
 
@@ -1673,7 +1708,7 @@ Serial GC、Parallel GC、Concurrent Mark Sweep GC 这三个 GC  不同：
 - 最大化应用程序的吞吐量，选 Parallel GC
 - 最小化 GC 的中断或停顿时间，选 CMS GC
 
-![](https://seazean.oss-cn-beijing.aliyuncs.com/img/Java/JVM-垃圾回收器总结.png)
+![输入图片说明](https://foruda.gitee.com/images/1685093127599899140/7fdd1b60_8616658.png "JVM-垃圾回收器总结")
 
 
 
@@ -1945,7 +1980,7 @@ private int hash32;
 
 下图显示了一个简单的对象引用关系图，对象 A 引用了 C 和 D，对象 B 引用了 C 和 E。那么对象 A 的浅堆大小只是 A 本身，**A 的实际大小为 A、C、D 三者之和**，A 的深堆大小为 A 与 D 之和，由于对象 C 还可以通过对象 B 访问到 C，因此 C 不在对象 A 的深堆范围内
 
-<img src="https://seazean.oss-cn-beijing.aliyuncs.com/img/Java/JVM-对象的实际大小.png" style="zoom: 67%;" />
+<img src="https://foruda.gitee.com/images/1685093175560712843/423e4650_8616658.png" style="zoom: 67%;" />
 
 内存分析工具 MAT 提供了一种叫支配树的对象图，体现了对象实例间的支配关系
 
