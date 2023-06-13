@@ -4,6 +4,7 @@
   - [Java](/java/java)
   - [集合](java/集合)
   - [并发编程](java/并发编程)
+  - [JVM背诵版](/java/jvm背诵版)
   - [JVM](/java/jvm)
 
 * [redis](redis/readme)

@@ -1,34 +1,3 @@
-## 面试题
-
-##### [JVM内存结构](#内存结构)
-
-##### [OOM是什么？如何排查？](#)
-
-除了程序计数器外，其他内存区域都有OOM的风险。
-
-- 栈一般会发生`StackOverflowException`，如，32位的Windows系统单进程限制2G，无限制创建进程会发生栈的OOM；
-- Java8常量池移到堆中，溢出会发生`java.lang.OutOfMemoryError:Java heap space`，设置最大元空间大小参数无效；
-- 堆内存溢出，也会发生`java.lang.OutOfMemoryError:Java heap space`，是GC之后无法在堆内存空间中申请内存创建对象；
-- 方法区OOM，经常会动态生成大量的类、jsp等；
-- 直接内存OOM，涉及到`-XX:MaxDirectMemorySize`参数和`Unsafe`对象对内存的申请。
-
-排查OOM的方法：
-
-- 配置参数`-XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/tmp/heapdump.hprof`，当OOM时会自动dump堆内存信息到指定目录；
-- `jstat`查看监控的JVM内存和GC情况，先观察大概出现在什么区域；
-- 使用MAT工具加入dump文件，分析大对象占用情况，比如HashMap做缓存未清理，时间长了就会内存溢出，可以改为弱引用。
-
-##### [如何判断一个对象是否存活？](#垃圾判断)
-
-##### [可达性算法不可达的对象就一定会死亡，会被回收吗？](#垃圾判断)
-
-##### [强引用、软引用、弱引用、虚引用是什么？有什么区别？](#引用分析)
-
-##### [垃圾回收算法有哪些？](#回收算法)
-
-##### [有哪几种垃圾回收器？各自有什么优点？](#垃圾回收器)
-
-##### [Minor GC 和 Full GC有什么不同？](#分代思想)
 
 ## JVM概述
 
@@ -724,7 +693,6 @@ private int hash32;
 - 时间用 long/int 表示，不用 Date 或者 String
 
 
-
 ------
 
 
@@ -886,279 +854,6 @@ JVM 是通过**栈帧中的对象引用**访问到其内部的对象实例：
    ```
 
 
-
-------
-
-
-
-### 加载过程
-
-#### 生命周期
-
-类是在运行期间**第一次使用时动态加载**的（不使用不加载），而不是一次性加载所有类，因为一次性加载会占用很多的内存，加载的类信息存放于一块成为方法区的内存空间。
-
-![输入图片说明](https://foruda.gitee.com/images/1680746577485342162/7a3bcfdb_8616658.png "屏幕截图")
-
-包括 7 个阶段：
-
-- 加载（Loading）
-- 链接：验证（Verification）、准备（Preparation）、解析（Resolution）
-- 初始化（Initialization）
-- 使用（Using）
-- 卸载（Unloading）
-
-------
-
-
-
-#### 加载阶段
-
-加载是类加载的其中一个阶段，注意不要混淆.
-
-加载过程完成以下三件事：
-
-- 通过类的完全限定名称获取定义该类的二进制字节流（二进制字节码）；
-- 将该字节流表示的静态存储结构转换为方法区的运行时存储结构（Java 类模型）；
-- 将字节码文件加载至内存后，在**方法区中生成一个类模板对象**，在**堆**中生成一个**代表该类的 Class 对象**，作为该类在方法区中的各种数据的访问入口。
-
-其中二进制字节流可以从以下方式中获取：
-
-- 从 ZIP 包读取，成为 JAR、EAR、WAR 格式的基础；
-- 从网络中获取，最典型的应用是 Applet；
-- 由其他文件生成，例如由 JSP 文件生成对应的 Class 类；
-- 运行时计算生成，例如动态代理技术，在 java.lang.reflect.Proxy 使用 ProxyGenerator.generateProxyClass 生成字节码；
-
-方法区内部采用 C++ 的 instanceKlass 描述 Java 类的数据结构：
-
-- `_java_mirror` 即 Java 的类镜像，例如对 String 来说就是 String.class，作用是把 class 暴露给 Java 使用
-- `_super` 即父类、`_fields` 即成员变量、`_methods` 即方法、`_constants` 即常量池、`_class_loader` 即类加载器、`_vtable` **虚方法表**、`_itable` 接口方法表
-
-加载过程：
-
-- 如果这个类还有父类没有加载，先加载父类；
-- **加载和链接可能是交替运行的** ；
-- Class 对象和 _java_mirror 相互持有对方的地址，堆中对象通过 instanceKlass 和元空间进行交互。
-
-<img src="https://seazean.oss-cn-beijing.aliyuncs.com/img/Java/JVM-类的生命周期-加载.png" style="zoom:80%;" />
-
-创建数组类有些特殊，因为数组类本身并不是由类加载器负责创建，而是由 JVM 在运行时根据需要而直接创建的，但数组的元素类型仍然需要依靠类加载器去创建，创建数组类的过程：
-
-- 如果数组的元素类型是引用类型，那么遵循定义的加载过程递归加载和创建数组的元素类型；
-- JVM 使用指定的元素类型和数组维度来创建新的数组类；
-- **基本数据类型由启动类加载器加载** 。
-
-------
-
-
-
-#### 链接阶段
-
-##### 验证
-
-确保 Class 文件的字节流中包含的信息是否符合 JVM 规范，保证被加载类的正确性，不会危害虚拟机自身的安全。
-
-主要包括**四种验证**：
-
-- **文件格式验证**；
-- **语义检查**，但凡在语义上不符合规范的，虚拟机不会给予验证通过；
-  - 是否所有的类都有父类的存在（除了 Object 外，其他类都应该有父类）；
-  - 是否一些被定义为 final 的方法或者类被重写或继承了；
-  - 非抽象类是否实现了所有抽象方法或者接口方法；
-  - 是否存在不兼容的方法。
-- **字节码验证**，试图通过对字节码流的分析，判断字节码是否可以被正确地执行；
-  - 在字节码的执行过程中，是否会跳转到一条不存在的指令；
-  - 函数的调用是否传递了正确类型的参数；
-  - 变量的赋值是不是给了正确的数据类型；
-  - 栈映射帧（StackMapTable）在这个阶段用于检测在特定的字节码处，其局部变量表和操作数栈是否有着正确的数据类型。
-- **符号引用验证**，Class 文件在其常量池会通过字符串记录将要使用的其他类或者方法。
-
-------
-
-
-
-##### 准备
-
-准备阶段为**静态变量（类变量）分配内存并设置默认初始值**，使用的是方法区的内存。
-
-说明：实例变量不会在这阶段分配内存，它会在对象实例化时随着对象一起被分配在堆中，类加载发生在所有实例化操作之前，并且类加载只进行一次，实例化可以进行多次。
-
-类变量初始化：
-
-- static 变量分配空间和赋值是两个步骤：**分配空间在准备阶段完成，赋值在初始化阶段完成** ；
-- 如果 static 变量是 **final 的基本类型以及字符串常量**，那么编译阶段值（方法区）就确定了，准备阶段会显式初始化；
-- 如果 static 变量是 **final引用类型或者构造器方法的字符串**，赋值在初始化阶段完成。
-
-实例：
-
-- 初始值一般为 0 值，例如下面的类变量 value 被初始化为 0 而不是 123；
-
-  ```java
-  public static int value = 123;
-  ```
-
-- 常量 value 被初始化为 123 而不是 0；
-
-  ```java
-  public static final int value = 123;
-  ```
-
-- Java 并不支持 boolean 类型，对于 boolean 类型，内部实现是 int，由于 int 的默认值是 0，故 boolean 的默认值就是 false。
-
-------
-
-
-
-##### 解析
-
-将常量池中类、接口、字段、方法的**符号引用替换为直接引用**（内存地址）的过程；
-
-- 符号引用：一组符号来描述目标，可以是任何字面量，属于编译原理方面的概念，如：包括类和接口的全限名、字段的名称和描述符、方法的名称和**方法描述符**（因为类还没有加载完，很多方法是找不到的）；
-- 直接引用：直接指向目标的指针、相对偏移量或一个间接定位到目标的句柄，如果有了直接引用，那说明引用的目标必定已经存在于内存之中；
-
-例如：在 `com.demo.Solution` 类中引用了 `com.test.Quest`，把 `com.test.Quest` 作为符号引用存进类常量池，在类加载完后，**用这个符号引用去方法区找这个类的内存地址**
-
-解析动作主要针对类或接口、字段、类方法、接口方法、方法类型等；
-
-- 在类加载阶段解析的是非虚方法，静态绑定；
-- 也可以在初始化阶段之后再开始解析，这是为了支持 Java 的**动态绑定** ；
-- 通过解析操作，符号引用就可以转变为目标方法在类的虚方法表中的位置，从而使得方法被成功调用。
-
-```java
-public class Load2 {
-    public static void main(String[] args) throws Exception{
-    ClassLoader classloader = Load2.class.getClassLoader();
-    // cloadClass 加载类方法不会导致类的解析和初始化，也不会加载D
-    Class<?> c = classloader.loadClass("cn.jvm.t3.load.C");
-        
-    // new C();会导致类的解析和初始化，从而解析初始化D
-    System.in.read();
-    }
-}
-class C {
-	D d = new D();
-}
-class D {
-}
-```
-
-
-
-------
-
-
-
-#### 初始化
-
-##### 介绍
-
-初始化阶段才真正开始执行类中定义的 Java 程序代码，在**准备阶段**，类变量已经赋过一次系统要求的**默认初始值**；在初始化阶段，通过程序制定的计划去初始化类变量和其它资源，执行  `<clinit>` 。
-
-在编译生成 class 文件时，编译器会产生两个方法加于 class 文件中，一个是类的初始化方法 clinit，另一个是实例的初始化方法 init 。
-
-类构造器  `<clinit>()`  与实例构造器  `<init>()` 不同，它不需要程序员进行显式调用，在一个类的生命周期中，类构造器最多被虚拟机**调用一次**，而实例构造器则会被虚拟机调用多次，只要程序员创建对象。
-
-类在第一次实例化加载一次，把 class 读入内存，后续实例化不再加载，引用第一次加载的类。
-
-
-
-------
-
-
-
-##### clinit
-
- `<clinit>()`：类构造器，由编译器自动收集类中**所有类变量的赋值动作和静态语句块**中的语句合并产生的，初始化阶段会先执行`<clint>()`方法，会为静态类变量显示赋值并执行静态代码块。
-
-作用：是在类加载过程中的初始化阶段进行静态变量初始化和执行静态代码块；
-
-- 如果类中没有静态变量或静态代码块，那么 clinit 方法将不会被生成；
-- clinit 方法只执行一次，在执行 clinit 方法时，必须先执行父类的clinit方法；
-- static 变量的赋值操作和静态代码块的合并顺序由源文件中出现的顺序决定；
-- static 不加 final 的变量都在初始化环节赋值。
-
-**线程安全**问题：
-
-- 虚拟机会保证一个类的  `<clinit>()` 方法在多线程环境下被正确的加锁和同步，如果多个线程同时初始化一个类，只会有一个线程执行这个类的  `<clinit>()` 方法，其它线程都阻塞等待，直到活动线程执行  `<clinit>()` 方法完毕；
-- 如果在一个类的  `<clinit>()` 方法中有耗时的操作，就可能造成多个线程阻塞，在实际过程中此种阻塞很隐蔽。
-
-特别注意：静态语句块只能访问到定义在它之前的类变量，定义在它之后的类变量只能赋值，不能访问 。
-
-```java
-public class Test {
-    static {
-        //i = 0;                // 给变量赋值可以正常编译通过
-        System.out.print(i);  	// 这句编译器会提示“非法向前引用”
-    }
-    static int i = 1;
-}
-```
-
-接口中不可以使用静态语句块，但仍然有类变量初始化的赋值操作，因此接口与类一样都会生成  `<clinit>()` 方法，两者不同的是：
-
-- 在初始化一个接口时，并不会先初始化它的父接口，所以执行接口的  `<clinit>()` 方法不需要先执行父接口的     `<clinit>()` 方法；
-- 在初始化一个类时，不会先初始化所实现的接口，所以接口的实现类在初始化时不会执行接口的  `<clinit>()` 方法；
-- 只有当父接口中定义的变量使用时，父接口才会初始化。
-
-------
-
-
-
-##### 时机
-
-类的初始化是懒惰的，只有在首次使用时才会被装载，JVM 不会无条件地装载 Class 类型，Java 虚拟机规定，一个类或接口在初次使用前，必须要进行初始化
-
-**主动引用**：虚拟机规范中并没有强制约束何时进行加载，但是规范严格规定了有且只有下列情况必须对类进行初始化（加载、验证、准备都会发生）：
-
-- 当创建一个类的实例时，使用 new 关键字，或者通过反射、克隆、反序列化（前文讲述的对象的创建时机）
-- 当调用类的静态方法或访问静态字段时，遇到 getstatic、putstatic、invokestatic 这三条字节码指令，如果类没有进行过初始化，则必须先触发其初始化
-  - getstatic：程序访问类的静态变量（不是静态常量，常量会被加载到运行时常量池）
-  - putstatic：程序给类的静态变量赋值
-  - invokestatic ：调用一个类的静态方法
-- 使用 java.lang.reflect 包的方法对类进行反射调用时，如果类没有进行初始化，则需要先触发其初始化
-- 当初始化一个类的时候，如果发现其父类还没有进行过初始化，则需要先触发其父类的初始化，但这条规则并**不适用于接口**
-- 当虚拟机启动时，需要指定一个要执行的主类（包含 main() 方法的那个类），虚拟机会先初始化这个主类
-- MethodHandle 和 VarHandle 可以看作是轻量级的反射调用机制，而要想使用这两个调用， 就必须先使用 findStaticVarHandle 来初始化要调用的类
-- 补充：当一个接口中定义了 JDK8 新加入的默认方法（被 default 关键字修饰的接口方法）时，如果有这个接口的实现类发生了初始化，那该接口要在其之前被初始化
-
-**被动引用**：所有引用类的方式都不会触发初始化，称为被动引用
-
-- 通过子类引用父类的静态字段，不会导致子类初始化，只会触发父类的初始化
-- 通过数组定义来引用类，不会触发此类的初始化。该过程会对数组类进行初始化，数组类是一个由虚拟机自动生成的、直接继承自 Object 的子类，其中包含了数组的属性和方法
-- 常量（final 修饰）在编译阶段会存入调用类的常量池中，本质上没有直接引用到定义常量的类，因此不会触发定义常量的类的初始化
-- 调用 ClassLoader 类的 loadClass() 方法加载一个类，并不是对类的主动使用，不会导致类的初始化
-
-------
-
-
-
-##### init
-
-init 指的是实例构造器，主要作用是在类实例化过程中执行，执行内容包括**成员变量**初始化和**代码块**的执行
-
-实例化即调用 <init>()V ，虚拟机会保证这个类的构造方法的线程安全，先为实例变量分配内存空间，再执行赋默认值，然后根据源码中的顺序执行赋初值或代码块，没有成员变量初始化和代码块则不会执行
-
-类实例化过程：**父类的类构造器<clinit>() -> 子类的类构造器<clinit>() -> 父类的成员变量和实例代码块 -> 父类的构造函数 -> 子类的成员变量和实例代码块 -> 子类的构造函数**
-
-new 关键字会创建对象并复制 dup 一个对象引用，一个调用 <init> 方法，另一个用来赋值给接收者
-
-
-
-------
-
-
-
-#### 卸载阶段
-
-时机：执行了 System.exit() 方法，程序正常执行结束，程序在执行过程中遇到了异常或错误而异常终止，由于操作系统出现错误而导致Java 虚拟机进程终止
-
-卸载类即该类的 **Class 对象被 GC**，卸载类需要满足3个要求:
-
-1. 该类的所有的实例对象都已被 GC，也就是说堆不存在该类的实例对象
-2. 该类没有在其他任何地方被引用
-3. 该类的类加载器的实例已被 GC，一般是可替换类加载器的场景，如 OSGi、JSP 的重加载等，很难达成
-
-在 JVM 生命周期类，由 JVM 自带的类加载器加载的类是不会被卸载的，自定义的类加载器加载的类是可能被卸载。因为 JVM 会始终引用启动、扩展、系统类加载器，这些类加载器始终引用它们所加载的类，这些类始终是可及的
-
 ***
 
 ## 内存管理
@@ -1307,11 +1002,11 @@ Java8 时，堆被分为了两份：新生代和老年代（1:2），在 Java7 �
 >
 > Eden区要满时触发YoungGC（Minor GC）。
 >
-> FullGC同时回收新生代、老年代和方法区，智慧存在一个FullGC的线程进行执行（STW），其他线程全部挂起，触发条件：
+> FullGC同时回收新生代、老年代和方法区，只会存在一个FullGC的线程进行执行（STW），其他线程全部挂起，触发条件：
 >
 > - `System.gc()` 或 `Runtime.getRuntime().gc()` 。
 > - 老年代空间不足。
-> - 空间分配dan
+> - 空间分配担保
 >
 > [触发条件](#回收策略)
 >
@@ -1537,9 +1232,7 @@ GC Roots 对象：
 
 ##### 工作原理
 
-可达性分析算法以根对象集合（GCRoots）为起始点，从上至下的方式搜索被根对象集合所连接的目标对象
-
-分析工作必须在一个保障**一致性的快照**中进行，否则结果的准确性无法保证，这也是导致 GC 进行时必须 Stop The World 的一个原因
+可达性分析算法以根对象集合（GCRoots）为起始点，从上至下的方式搜索被根对象集合所连接的目标对象，分析工作必须在一个保障**一致性的快照**中进行，否则结果的准确性无法保证，这也是导致 GC 进行时必须 Stop The World 的一个原因。
 
 基本原理：
 
@@ -1799,17 +1492,17 @@ Java 语言提供了对象终止（finalization）机制来允许开发人员**�
 
 ### 标记清除
 
-标记清除算法，是将垃圾回收分为两个阶段，分别是**标记和清除**
+标记清除算法，是将垃圾回收分为两个阶段，分别是**标记和清除** 。
 
-- **标记**：Collector 从引用根节点开始遍历，标记所有被引用的对象，一般是在对象的 Header 中记录为可达对象，**标记的是引用的对象，不是垃圾**
-- **清除**：Collector 对堆内存从头到尾进行线性的遍历，如果发现某个对象在其 Header 中没有标记为可达对象，则将其回收，把分块连接到**空闲列表**的单向链表，判断回收后的分块与前一个空闲分块是否连续，若连续会合并这两个分块，之后进行分配时只需要遍历这个空闲列表，就可以找到分块
+- **标记**：Collector 从引用根节点开始遍历，标记所有被引用的对象，一般是在对象的 Header 中记录为可达对象，**标记的是引用的对象，不是垃圾** ；
+- **清除**：Collector 对堆内存从头到尾进行线性的遍历，如果发现某个对象在其 Header 中没有标记为可达对象，则将其回收，把分块连接到**空闲列表**的单向链表，判断回收后的分块与前一个空闲分块是否连续，若连续会合并这两个分块，之后进行分配时只需要遍历这个空闲列表，就可以找到分块；
 
-- **分配阶段**：程序会搜索空闲链表寻找空间大于等于新对象大小 size 的块 block，如果找到的块等于 size，会直接返回这个分块；如果找到的块大于 size，会将块分割成大小为 size 与 block - size 的两部分，返回大小为 size 的分块，并把大小为 block - size 的块返回给空闲列表
+- **分配阶段**：程序会搜索空闲链表寻找空间大于等于新对象大小 size 的块 block，如果找到的块等于 size，会直接返回这个分块；如果找到的块大于 size，会将块分割成大小为 size 与 block - size 的两部分，返回大小为 size 的分块，并把大小为 block - size 的块返回给空闲列表。
 
 算法缺点：
 
-- 标记和清除过程效率都不高
-- 会产生大量不连续的内存碎片，导致无法给大对象分配内存，需要维护一个空闲链表
+- 标记和清除过程效率都不高；
+- 会产生大量不连续的内存碎片，导致无法给大对象分配内存，需要维护一个空闲链表。
 
 <img src="https://foruda.gitee.com/images/1685091453294330212/326ee1ea_8616658.png" style="zoom: 67%;" />
 
@@ -1821,9 +1514,9 @@ Java 语言提供了对象终止（finalization）机制来允许开发人员**�
 
 ### 标记整理
 
-标记整理（压缩）算法是在标记清除算法的基础之上，做了优化改进的算法
+标记整理（压缩）算法是在标记清除算法的基础之上，做了优化改进的算法。
 
-标记阶段和标记清除算法一样，也是从根节点开始，对对象的引用进行标记，在清理阶段，并不是简单的直接清理可回收对象，而是**将存活对象都向内存另一端移动**，然后清理边界以外的垃圾，从而**解决了碎片化**的问题
+算法过程：标记阶段和标记清除算法一样，也是从根节点开始，对对象的引用进行标记，在清理阶段，并不是简单的直接清理可回收对象，而是**将存活对象都向内存另一端移动**，然后清理边界以外的垃圾，从而**解决了碎片化**的问题
 
 优点：不会产生内存碎片
 
@@ -1835,23 +1528,25 @@ Java 语言提供了对象终止（finalization）机制来允许开发人员**�
 
 ### 复制算法
 
-复制算法的核心就是，**将原有的内存空间一分为二，每次只用其中的一块**，在垃圾回收时，将正在使用的对象复制到另一个内存空间中，然后将该内存空间清理，交换两个内存的角色，完成垃圾的回收
+复制算法的核心就是，**将原有的内存空间一分为二，每次只用其中的一块**，在垃圾回收时，将正在使用的对象复制到另一个内存空间中，然后将该内存空间清理，交换两个内存的角色，完成垃圾的回收。
 
-应用场景：如果内存中的垃圾对象较多，需要复制的对象就较少，这种情况下适合使用该方式并且效率比较高，反之则不适合
+算法过程：利用根可达分析算法，判断该对象是否是可用对象（非垃圾对象），如果可用则移动到空闲survivor区间，当所有对象遍历完成后，清空当前区间，并标记为下一次垃圾回收的空闲survivor区间。
+
+应用场景：如果内存中的垃圾对象较多，需要复制的对象就较少，这种情况下适合使用该方式并且效率比较高，反之则不适合。
 
 <img src="https://foruda.gitee.com/images/1685091348823991150/fe392e27_8616658.png" style="zoom: 67%;" />
 
 算法优点：
 
-- 没有标记和清除过程，实现简单，运行速度快
-- 复制过去以后保证空间的连续性，不会出现碎片问题
+- 没有标记和清除过程，实现简单，运行速度快；
+- 复制过去以后保证空间的连续性，不会出现碎片问题；
 
 算法缺点：
 
-- 主要不足是**只使用了内存的一半**
-- 对于 G1 这种分拆成为大量 region 的 GC，复制而不是移动，意味着 GC 需要维护 region 之间对象引用关系，不管是内存占用或者时间开销都不小
+- 主要不足是**只使用了内存的一半；**
+- 对于 G1 这种分拆成为大量 region 的 GC，复制而不是移动，意味着 GC 需要维护 region 之间对象引用关系，不管是内存占用或者时间开销都不小。
 
-现在的商业虚拟机都采用这种收集算法**回收新生代**，因为新生代 GC 频繁并且对象的存活率不高，但是并不是划分为大小相等的两块，而是一块较大的 Eden 空间和两块较小的 Survivor 空间
+现在的商业虚拟机都采用这种收集算法**回收新生代**，因为新生代 GC 频繁并且对象的存活率不高，但是并不是划分为大小相等的两块，而是一块较大的 Eden 空间和两块较小的 Survivor 空间。
 
 **回收算法比较：**
 
@@ -1919,24 +1614,24 @@ GC 性能指标：
 
 ### Serial
 
-Serial：**串行**垃圾收集器，作用于**新生代**，是指使用**单线程**进行垃圾回收，采用**复制算法**，新生代基本都是复制算法
+Serial：**串行**垃圾收集器，作用于**新生代**，是指使用**单线程**进行垃圾回收，采用**复制算法**，新生代基本都是复制算法；
 
 **STW（Stop-The-World）**：垃圾回收时，只有一个线程在工作，并且 Java 应用中的所有线程都要暂停，等待垃圾回收的完成
 
-**Serial old**：执行老年代垃圾回收的串行收集器，内存回收算法使用的是**标记-整理算法**，同样也采用了串行回收和 STW 机制
+**Serial old**：执行老年代垃圾回收的串行收集器，内存回收算法使用的是**标记-整理算法**，同样也采用了串行回收和 STW 机制；
 
 - Serial old 是 Client 模式下默认的老年代的垃圾回收器
 - Serial old 在 Server 模式下主要有两个用途：
   - 在 JDK 1.5 以及之前版本（Parallel Old 诞生以前）中与 Parallel Scavenge 收集器搭配使用
   - 作为老年代 CMS 收集器的**后备垃圾回收方案**，在并发收集发生 Concurrent Mode Failure 时使用
 
-开启参数：`-XX:+UseSerialGC` 等价于新生代用 Serial GC 且老年代用 Serial old GC
+开启参数：`-XX:+UseSerialGC` 等价于新生代用 Serial GC 且老年代用 Serial old GC。
 
 ![](https://foruda.gitee.com/images/1685093051188379874/eef19911_8616658.png)
 
-优点：简单而高效（与其他收集器的单线程比），对于限定单个 CPU 的环境来说，Serial 收集器由于没有线程交互的开销，可以获得最高的单线程收集效率
+优点：简单而高效（与其他收集器的单线程比），对于限定单个 CPU 的环境来说，Serial 收集器由于没有线程交互的开销，可以获得最高的单线程收集效率；
 
-缺点：对于交互性较强的应用而言，这种垃圾收集器是不能够接受的，比如 JavaWeb 应用
+缺点：对于交互性较强的应用而言，这种垃圾收集器是不能够接受的，比如 JavaWeb 应用；
 
 
 
@@ -1946,9 +1641,9 @@ Serial：**串行**垃圾收集器，作用于**新生代**，是指使用**单�
 
 ### ParNew
 
-Par 是 Parallel 并行的缩写，New 是只能处理的是新生代
+Par 是 Parallel 并行的缩写，New 是只能处理的是新生代 ；
 
-并行垃圾收集器在串行垃圾收集器的基础之上做了改进，**采用复制算法**，将单线程改为了多线程进行垃圾回收，可以缩短垃圾回收的时间
+并行垃圾收集器在串行垃圾收集器的基础之上做了改进，**采用复制算法**，将单线程改为了多线程进行垃圾回收，可以缩短垃圾回收的时间；
 
 对于其他的行为（收集算法、stop the world、对象分配规则、回收策略等）同 Serial 收集器一样，应用在年轻代，除 Serial 外，只有**ParNew GC 能与 CMS 收集器配合工作**
 
@@ -1972,9 +1667,9 @@ ParNew 是很多 JVM 运行在 Server 模式下新生代的默认垃圾收集器
 
 ### Parallel
 
-Parallel Scavenge 收集器是应用于新生代的并行垃圾回收器，**采用复制算法**、并行回收和 Stop the World 机制
+Parallel Scavenge 收集器是应用于新生代的并行垃圾回收器，**采用复制算法**、并行回收和 Stop the World 机制，以**吞吐量优先** ；
 
-Parallel Old 收集器：是一个应用于老年代的并行垃圾回收器，**采用标记-整理算法**
+Parallel Old 收集器：是一个应用于老年代的并行垃圾回收器，**采用标记-整理算法** ；
 
 对比其他回收器：
 
@@ -2072,13 +1767,13 @@ Mark Sweep 会造成内存碎片，不把算法换成 Mark Compact 的原因：M
 
 ### G1
 
-**G1 特点**
+** G1 特点 **
 
 G1（Garbage-First）是一款面向服务端应用的垃圾收集器，**应用于新生代和老年代**、采用标记-整理算法、软实时、低延迟、可设定目标（最大 STW 停顿时间）的垃圾回收器，用于代替 CMS，适用于较大的堆（>4 ~ 6G），在 JDK9 之后默认使用 G1。
 
 **超大堆内存管理思想。**
 
-##### 工作原理
+**工作原理**
 
 G1 中提供了三种垃圾回收模式：YoungGC、Mixed GC 和 Full GC，在不同的条件下被触发
 
@@ -2168,7 +1863,7 @@ G1 垃圾收集器的缺点：
 
 
 
-##### 记忆集
+**记忆集**
 
 记忆集 Remembered Set 在新生代中，每个 Region 都有一个 Remembered Set，用来被哪些其他 Region 里的对象引用（谁引用了我就记录谁）
 
@@ -2191,18 +1886,13 @@ G1 垃圾收集器的缺点：
 * CSet of Mix Collection
 
 
-***
-
-
-
-* * ​
 
 
 ***
 
 
 
-##### 相关参数
+**相关参数**
 
 - `-XX:+UseG1GC`：手动指定使用 G1 垃圾收集器执行内存回收任务
 - `-XX:G1HeapRegionSize`：设置每个 Region 的大小。值是 2 的幂，范围是 1MB 到 32MB 之间，目标是根据最小的 Java 堆大小划分出约 2048 个区域，默认是堆内存的 1/2000
@@ -2220,7 +1910,7 @@ G1 垃圾收集器的缺点：
 
 
 
-##### 调优
+** 调优 **
 
 G1 的设计原则就是简化 JVM 性能调优，只需要简单的三步即可完成调优：
 
@@ -2245,7 +1935,7 @@ G1 的设计原则就是简化 JVM 性能调优，只需要简单的三步即可
 
 
 
-#### ZGC
+### ZGC
 
 ZGC 收集器是一个可伸缩的、低延迟的垃圾收集器，基于 Region 内存布局的，不设分代，使用了读屏障、染色指针和内存多重映射等技术来实现**可并发的标记压缩算法**
 
@@ -2288,7 +1978,7 @@ ZGC 几乎在所有地方并发执行的，除了初始标记的是 STW 的，�
 
 
 
-#### 总结
+### 总结
 
 Serial GC、Parallel GC、Concurrent Mark Sweep GC 这三个 GC  不同：
 
@@ -2306,17 +1996,15 @@ Serial GC、Parallel GC、Concurrent Mark Sweep GC 这三个 GC  不同：
 
 
 
-### 内存泄漏
+## 内存泄漏
 
-#### 泄露溢出
+内存泄漏（Memory Leak）：是指程序中已动态分配的堆内存由于某种原因程序未释放或无法释放，造成系统内存的浪费，导致程序运行速度减慢甚至系统崩溃等严重后果。
 
-内存泄漏（Memory Leak）：是指程序中已动态分配的堆内存由于某种原因程序未释放或无法释放，造成系统内存的浪费，导致程序运行速度减慢甚至系统崩溃等严重后果
+可达性分析算法来判断对象是否是不再使用的对象，本质都是判断一个对象是否还被引用。由于代码的实现不同就会出现很多种内存泄漏问题，让 JVM 误以为此对象还在引用中，无法回收，造成内存泄漏。
 
-可达性分析算法来判断对象是否是不再使用的对象，本质都是判断一个对象是否还被引用。由于代码的实现不同就会出现很多种内存泄漏问题，让 JVM 误以为此对象还在引用中，无法回收，造成内存泄漏
+内存溢出（out of memory）指的是申请内存时，没有足够的内存可以使用。
 
-内存溢出（out of memory）指的是申请内存时，没有足够的内存可以使用
-
-内存泄漏和内存溢出的关系：内存泄漏的越来越多，最终会导致内存溢出
+内存泄漏和内存溢出的关系：内存泄漏的越来越多，最终会导致内存溢出。
 
 
 
@@ -2324,11 +2012,9 @@ Serial GC、Parallel GC、Concurrent Mark Sweep GC 这三个 GC  不同：
 
 
 
-#### 几种情况
+### 静态集合
 
-##### 静态集合
-
-静态集合类的生命周期与 JVM 程序一致，则容器中的对象在程序结束之前将不能被释放，从而造成内存泄漏。原因是**长生命周期的对象持有短生命周期对象的引用**，尽管短生命周期的对象不再使用，但是因为长生命周期对象持有它的引用而导致不能被回收
+静态集合类的生命周期与 JVM 程序一致，则容器中的对象在程序结束之前将不能被释放，从而造成内存泄漏。原因是**长生命周期的对象持有短生命周期对象的引用**，尽管短生命周期的对象不再使用，但是因为长生命周期对象持有它的引用而导致不能被回收。
 
 ```java
 public class MemoryLeak {
@@ -2346,9 +2032,9 @@ public class MemoryLeak {
 
 
 
-##### 单例模式
+### 单例模式
 
-单例模式和静态集合导致内存泄露的原因类似，因为单例的静态特性，它的生命周期和 JVM 的生命周期一样长，所以如果单例对象持有外部对象的引用，那么这个外部对象也不会被回收，那么就会造成内存泄漏
+单例模式和静态集合导致内存泄露的原因类似，因为单例的静态特性，它的生命周期和 JVM 的生命周期一样长，所以如果单例对象持有外部对象的引用，那么这个外部对象也不会被回收，那么就会造成内存泄漏。
 
 
 
@@ -2356,9 +2042,11 @@ public class MemoryLeak {
 
 
 
-##### 内部类
+### 内部类
 
-内部类持有外部类的情况，如果一个外部类的实例对象调用方法返回了一个内部类的实例对象，即使那个外部类实例对象不再被使用，但由于内部类持有外部类的实例对象，这个外部类对象也不会被回收，造成内存泄漏
+内部类持有外部类的情况，如果一个外部类的实例对象调用方法返回了一个内部类的实例对象，即使那个外部类实例对象不再被使用，但由于内部类持有外部类的实例对象，这个外部类对象也不会被回收，造成内存泄漏。
+
+ps：不太理解
 
 
 
@@ -2366,9 +2054,9 @@ public class MemoryLeak {
 
 
 
-##### 连接相关
+### 连接相关
 
-数据库连接、网络连接和 IO 连接等，当不再使用时，需要显式调用 close 方法来释放与连接，垃圾回收器才会回收对应的对象，否则将会造成大量的对象无法被回收，从而引起内存泄漏
+数据库连接、网络连接和 IO 连接等，当不再使用时，需要显式调用 close 方法来释放与连接，垃圾回收器才会回收对应的对象，否则将会造成大量的对象无法被回收，从而引起内存泄漏。
 
 
 
@@ -2376,9 +2064,9 @@ public class MemoryLeak {
 
 
 
-##### 不合理域
+### 不合理域
 
-变量不合理的作用域，一个变量的定义的作用范围大于其使用范围，很有可能会造成内存泄漏；如果没有及时地把对象设置为 null，也有可能导致内存泄漏的发生
+变量不合理的作用域，一个变量的定义的作用范围大于其使用范围，很有可能会造成内存泄漏；如果没有及时地把对象设置为 null，也有可能导致内存泄漏的发生。
 
 ```java
 public class UsingRandom {
@@ -2394,7 +2082,7 @@ public class UsingRandom {
 
 解决：
 
-* msg 变量可以放在 receiveMsg 方法内部，当方法使用完，msg 的生命周期也就结束，就可以被回收了
+* msg 变量可以放在 receiveMsg 方法内部，当方法使用完，msg 的生命周期也就结束，就可以被回收了；
 * 在使用完 msg 后，把 msg 设置为 null，这样垃圾回收器也会回收 msg 的内存空间。
 
 
@@ -2402,9 +2090,9 @@ public class UsingRandom {
 
 
 
-##### 改变哈希
+### 改变哈希
 
-当一个对象被存储进 HashSet 集合中以后，就**不能修改这个对象中的那些参与计算哈希值的字段**，否则对象修改后的哈希值与最初存储进 HashSet 集合中时的哈希值不同，这种情况下使用该对象的当前引用作为的参数去 HashSet 集合中检索对象返回 false，导致无法从 HashSet 集合中单独删除当前对象，造成内存泄漏
+当一个对象被存储进 HashSet 集合中以后，就**不能修改这个对象中的那些参与计算哈希值的字段**，否则对象修改后的哈希值与最初存储进 HashSet 集合中时的哈希值不同，这种情况下使用该对象的当前引用作为的参数去 HashSet 集合中检索对象返回 false，导致无法从 HashSet 集合中单独删除当前对象，造成内存泄漏。
 
 
 
@@ -2412,11 +2100,11 @@ public class UsingRandom {
 
 
 
-##### 缓存泄露
+### 缓存泄露
 
-内存泄漏的一个常见来源是缓存，一旦把对象引用放入到缓存中，就会很容易被遗忘
+内存泄漏的一个常见来源是缓存，一旦把对象引用放入到缓存中，就会很容易被遗忘；
 
-使用 WeakHashMap 代表缓存，当除了自身有对 key 的引用外没有其他引用，map 会自动丢弃此值
+使用 WeakHashMap 代表缓存，当除了自身有对 key 的引用外没有其他引用，map 会自动丢弃此值。
 
 
 
@@ -2474,407 +2162,8 @@ public Object pop() {
 
 
 
-***
-
-
-
-
-
-
-
-
-
 ****
 
-
-
-## 类加载器
-
-### 类加载
-
-类加载方式：
-
-* 隐式加载：不直接在代码中调用 ClassLoader 的方法加载类对象
-  * 创建类对象、使用类的静态域、创建子类对象、使用子类的静态域
-  * 在 JVM 启动时，通过三大类加载器加载 class
-* 显式加载：
-  * ClassLoader.loadClass(className)：只加载和连接，**不会进行初始化**
-  * Class.forName(String name, boolean initialize, ClassLoader loader)：使用 loader 进行加载和连接，根据参数 initialize 决定是否初始化
-
-类的唯一性：
-
-* 在 JVM 中表示两个 class 对象判断为同一个类存在的两个必要条件：
-  - 类的完整类名必须一致，包括包名
-  - 加载这个类的 ClassLoader（指 ClassLoader 实例对象）必须相同
-* 这里的相等，包括类的 Class 对象的 equals() 方法、isAssignableFrom() 方法、isInstance() 方法的返回结果为 true，也包括使用 instanceof 关键字做对象所属关系判定结果为 true
-
-命名空间：
-
-- 每个类加载器都有自己的命名空间，命名空间由该加载器及所有的父加载器所加载的类组成
-- 在同一命名空间中，不会出现类的完整名字（包括类的包名）相同的两个类
-
-基本特征：
-
-* **可见性**，子类加载器可以访问父加载器加载的类型，但是反过来是不允许的
-* **单一性**，由于父加载器的类型对于子加载器是可见的，所以父加载器中加载过的类型，不会在子加载器中重复加载
-
-
-***
-
-
-
-#### 加载器
-
-类加载器是 Java 的核心组件，用于加载字节码到 JVM 内存，得到 Class 类的对象
-
-从 Java 虚拟机规范来讲，只存在以下两种不同的类加载器：
-
-- 启动类加载器（Bootstrap ClassLoader）：使用 C++ 实现，是虚拟机自身的一部分
-- 自定义类加载器（User-Defined ClassLoader）：Java 虚拟机规范**将所有派生于抽象类 ClassLoader 的类加载器都划分为自定义类加载器**，使用 Java 语言实现，独立于虚拟机
-
-从 Java 开发人员的角度看：
-
-* 启动类加载器（Bootstrap ClassLoader）：
-  * 处于安全考虑，Bootstrap 启动类加载器只加载包名为 java、javax、sun 等开头的类
-  * 类加载器负责加载在 `JAVA_HOME/jre/lib` 或 `sun.boot.class.path` 目录中的，或者被 -Xbootclasspath 参数所指定的路径中的类，并且是虚拟机识别的类库加载到虚拟机内存中
-  * 仅按照文件名识别，如 rt.jar 名字不符合的类库即使放在 lib 目录中也不会被加载
-  * 启动类加载器无法被 Java 程序直接引用，编写自定义类加载器时，如果要把加载请求委派给启动类加载器，直接使用 null 代替
-* 扩展类加载器（Extension ClassLoader）：
-  * 由 ExtClassLoader (sun.misc.Launcher$ExtClassLoader)  实现，上级为 Bootstrap，显示为 null
-  * 将 `JAVA_HOME/jre/lib/ext` 或者被 `java.ext.dir` 系统变量所指定路径中的所有类库加载到内存中
-  * 开发者可以使用扩展类加载器，创建的 JAR 放在此目录下，会由扩展类加载器自动加载
-* 应用程序类加载器（Application ClassLoader）：
-  * 由 AppClassLoader(sun.misc.Launcher$AppClassLoader) 实现，上级为 Extension
-  * 负责加载环境变量 classpath 或系统属性 `java.class.path` 指定路径下的类库
-  * 这个类加载器是 ClassLoader 中的 getSystemClassLoader() 方法的返回值，因此称为系统类加载器
-  * 可以直接使用这个类加载器，如果应用程序中没有自定义类加载器，这个就是程序中默认的类加载器
-* 自定义类加载器：由开发人员自定义的类加载器，上级是 Application
-
-```java
-public static void main(String[] args) {
-    //获取系统类加载器
-    ClassLoader systemClassLoader = ClassLoader.getSystemClassLoader();
-    System.out.println(systemClassLoader);//sun.misc.Launcher$AppClassLoader@18b4aac2
-
-    //获取其上层  扩展类加载器
-    ClassLoader extClassLoader = systemClassLoader.getParent();
-    System.out.println(extClassLoader);//sun.misc.Launcher$ExtClassLoader@610455d6
-
-    //获取其上层 获取不到引导类加载器
-    ClassLoader bootStrapClassLoader = extClassLoader.getParent();
-    System.out.println(bootStrapClassLoader);//null
-
-    //对于用户自定义类来说：使用系统类加载器进行加载
-    ClassLoader classLoader = ClassLoaderTest.class.getClassLoader();
-    System.out.println(classLoader);//sun.misc.Launcher$AppClassLoader@18b4aac2
-
-    //String 类使用引导类加载器进行加载的 --> java核心类库都是使用启动类加载器加载的
-    ClassLoader classLoader1 = String.class.getClassLoader();
-    System.out.println(classLoader1);//null
-
-}
-```
-
-补充两个类加载器：
-
-* SecureClassLoader 扩展了 ClassLoader，新增了几个与使用相关的代码源和权限定义类验证（对 class 源码的访问权限）的方法，一般不会直接跟这个类打交道，更多是与它的子类 URLClassLoader 有所关联
-* ClassLoader 是一个抽象类，很多方法是空的没有实现，而 URLClassLoader 这个实现类为这些方法提供了具体的实现，并新增了 URLClassPath 类协助取得 Class 字节流等功能。在编写自定义类加载器时，如果没有太过于复杂的需求，可以直接继承 URLClassLoader 类，这样就可以避免去编写 findClass() 方法及其获取字节码流的方式，使自定义类加载器编写更加简洁
-
-
-***
-
-
-
-#### 常用API
-
-ClassLoader 类，是一个抽象类，其后所有的类加载器都继承自 ClassLoader（不包括启动类加载器）
-
-获取 ClassLoader 的途径：
-
-* 获取当前类的 ClassLoader：`clazz.getClassLoader()`
-* 获取当前线程上下文的 ClassLoader：`Thread.currentThread.getContextClassLoader()`
-* 获取系统的 ClassLoader：`ClassLoader.getSystemClassLoader()`
-* 获取调用者的 ClassLoader：`DriverManager.getCallerClassLoader()`
-
-ClassLoader 类常用方法：
-
-* `getParent()`：返回该类加载器的超类加载器  
-* `loadclass(String name)`：加载名为 name 的类，返回结果为 Class 类的实例，**该方法就是双亲委派模式**
-* `findclass(String name)`：查找二进制名称为 name 的类，返回结果为 Class 类的实例，该方法会在检查完父类加载器之后被 loadClass() 方法调用
-* `findLoadedClass(String name)`：查找名称为 name 的已经被加载过的类，final 修饰无法重写
-* `defineClass(String name, byte[] b, int off, int len)`：将**字节流**解析成 JVM 能够识别的类对象
-* `resolveclass(Class<?> c)`：链接指定的 Java 类，可以使类的 Class 对象创建完成的同时也被解析
-* `InputStream getResourceAsStream(String name)`：指定资源名称获取输入流
-
-
-***
-
-
-
-#### 加载模型
-
-##### 加载机制
-
-在 JVM 中，对于类加载模型提供了三种，分别为**全盘加载**、**双亲委派**、**缓存机制**。
-
-- **全盘加载：**当一个类加载器负责加载某个 Class 时，该 Class 所**依赖和引用**的其他 Class 也将由该类加载器负责载入，除非显示指定使用另外一个类加载器来载入；
-
-- **双亲委派：**某个特定的类加载器在接到加载类的请求时，首先将加载任务委托给父加载器，**依次递归**，如果父加载器可以完成类加载任务，就成功返回；只有当父加载器无法完成此加载任务时，才自己去加载；
-
-- **缓存机制：**会保证所有加载过的 Class 都会被缓存，当程序中需要使用某个 Class 时，类加载器先从缓存区中搜寻该 Class，只有当缓存区中不存在该 Class 对象时，系统才会读取该类对应的二进制数据，并将其转换成 Class 对象存入缓冲区（方法区）中。
-  - 这就是修改了 Class 后，必须重新启动 JVM，程序所做的修改才会生效的原因。
-
-
-
-
-***
-
-
-
-##### 双亲委派
-
-双亲委派模型（Parents Delegation Model）：该模型要求除了顶层的启动类加载器外，其它类加载器都要有父类加载器，这里的父子关系一般通过**组合关系**（Composition）来实现，而不是继承关系（Inheritance）
-
-工作过程：一个类加载器首先将类加载请求转发到父类加载器，只有当父类加载器无法完成时才尝试自己加载
-
-双亲委派机制的优点：
-
-* 可以避免某一个类被重复加载，当父类已经加载后则无需重复加载，保证全局唯一性
-
-* Java 类随着它的类加载器一起具有一种带有优先级的层次关系，从而使得基础类得到统一
-
-* 保护程序安全，防止类库的核心 API 被随意篡改
-
-  例如：在工程中新建 java.lang 包，接着在该包下新建 String 类，并定义 main 函数
-
-  ```java
-  public class String {
-      public static void main(String[] args) {
-          System.out.println("demo info");
-      }
-  }
-  ```
-
-  此时执行 main 函数会出现异常，在类 java.lang.String 中找不到 main 方法。因为双亲委派的机制，java.lang.String 的在启动类加载器（Bootstrap）得到加载，启动类加载器优先级更高，在核心 jre 库中有其相同名字的类文件，但该类中并没有 main 方法
-
-双亲委派机制的缺点：检查类是否加载的委托过程是单向的，这个方式虽然从结构上看比较清晰，使各个 ClassLoader 的职责非常明确，但**顶层的 ClassLoader 无法访问底层的 ClassLoader 所加载的类**（可见性）
-
-<img src="https://foruda.gitee.com/images/1680776931151593718/18d5c635_8616658.png" style="zoom: 50%;" />
-
-
-
-***
-
-
-
-##### 源码分析
-
-```java
-protected Class<?> loadClass(String name, boolean resolve)
-    throws ClassNotFoundException {
-    synchronized (getClassLoadingLock(name)) {
-       // 1. 调用当前类加载器的 findLoadedClass(name)，检查当前类加载器是否已加载过指定 name 的类
-        Class c = findLoadedClass(name);
-        
-        // 2. 当前类加载器如果没有加载过
-        if (c == null) {
-            long t0 = System.nanoTime();
-            try {
-                // 3. 判断当前类加载器是否有父类加载器
-                if (parent != null) {
-                    // 4. 如果当前类加载器有父类加载器，则调用父类加载器的 loadClass(name,false)
-         			// 5. 父类加载器的 loadClass 方法，又会检查自己是否已经加载过
-                    c = parent.loadClass(name, false);
-                } else {
-                    // 当前类加载器没有父类加载器，说明当前类加载器是 BootStrapClassLoader
-          			// 则调用 BootStrap ClassLoader 的方法加载类
-                    c = findBootstrapClassOrNull(name);
-                }
-            } catch (ClassNotFoundException e) { }
-
-            if (c == null) {
-                // 如果调用父类的类加载器无法对类进行加载，则用自己的 findClass() 方法进行加载
-                // 可以自定义 findClass() 方法
-                long t1 = System.nanoTime();
-                c = findClass(name);
-
-                // this is the defining class loader; record the stats
-                sun.misc.PerfCounter.getParentDelegationTime().addTime(t1 - t0);
-                sun.misc.PerfCounter.getFindClassTime().addElapsedTimeFrom(t1);
-                sun.misc.PerfCounter.getFindClasses().increment();
-            }
-        }
-        if (resolve) {
-            // 链接指定的 Java 类，可以使类的 Class 对象创建完成的同时也被解析
-            resolveClass(c);
-        }
-        return c;
-    }
-}
-```
-
-
-
-****
-
-
-
-##### 破坏委派
-
-双亲委派模型并不是一个具有强制性约束的模型，而是 Java 设计者推荐给开发者的类加载器实现方式。
-
-破坏双亲委派模型的方式：
-
-* 自定义 ClassLoader
-
-  * 如果不想破坏双亲委派模型，只需要重写 `findClass` 方法；
-  * 如果想要去破坏双亲委派模型，需要去**重写 loadClass **方法。
-
-* 引入**线程上下文类加载器**
-
-  Java 提供了很多服务提供者接口（Service Provider Interface，SPI），允许第三方为这些接口提供实现。常见的有 JDBC、JCE、JNDI 等。这些 SPI 接口由 Java 核心库来提供，而 SPI 的实现代码则是作为 Java 应用所依赖的 jar 包被包含进类路径 classpath 里，SPI 接口中的代码需要加载具体的实现类：
-
-  * SPI 的接口是 Java 核心库的一部分，是由引导类加载器来加载的；
-  * SPI 的实现类是由系统类（程序类）加载器加载，引导类加载器是无法找到 SPI 的实现类，因为双亲委派模型中 BootstrapClassloader 无法委派 AppClassLoader 来加载类；
-
-  JDK 开发人员引入了线程上下文类加载器（Thread Context ClassLoader），这种类加载器可以通过 Thread  类的 setContextClassLoader 方法进行设置线程上下文类加载器，在执行线程中抛弃双亲委派加载模式，使程序可以逆向使用类加载器，使 Bootstrap 加载器拿到了 Application 加载器加载的类，破坏了双亲委派模型。
-
-* 实现程序的动态性，如代码热替换（Hot Swap）、模块热部署（Hot Deployment）。
-
-  IBM 公司主导的 JSR一291（OSGiR4.2）实现模块化热部署的关键是它自定义的类加载器机制的实现，每一个程序模块（OSGi 中称为 Bundle）都有一个自己的类加载器，当更换一个 Bundle 时，就把 Bundle 连同类加载器一起换掉以实现代码的热替换，在 OSGi 环境下，类加载器不再双亲委派模型推荐的树状结构，而是进一步发展为更加复杂的网状结构
-
-  当收到类加载请求时，OSGi 将按照下面的顺序进行类搜索:
-
-  1. 将以 java.* 开头的类，委派给父类加载器加载
-  2. 否则，将委派列表名单内的类，委派给父类加载器加载
-  3. 否则，将 Import 列表中的类，委派给 Export 这个类的 Bundle 的类加载器加载
-  4. 否则，查找当前 Bundle 的 ClassPath，使用自己的类加载器加载
-  5. 否则，查找类是否在自己的 Fragment Bundle 中，如果在就委派给 Fragment Bundle 类加载器加载
-  6. 否则，查找 Dynamic Import 列表的 Bundle，委派给对应 Bundle 的类加载器加载
-  7. 否则，类查找失败
-
-  热替换是指在程序的运行过程中，不停止服务，只通过替换程序文件来修改程序的行为，**热替换的关键需求在于服务不能中断**，修改必须立即表现正在运行的系统之中
-
-<img src="https://foruda.gitee.com/images/1680777486535354363/e9f4ffe9_8616658.png" style="zoom: 33%;" />
-
-
-
-***
-
-
-
-#### 沙箱机制
-
-沙箱机制（Sandbox）：将 Java 代码限定在虚拟机特定的运行范围中，并且严格限制代码对本地系统资源访问，来保证对代码的有效隔离，防止对本地系统造成破坏
-
-沙箱**限制系统资源访问**，包括 CPU、内存、文件系统、网络，不同级别的沙箱对资源访问的限制也不一样
-
-* JDK1.0：Java 中将执行程序分成本地代码和远程代码两种，本地代码默认视为可信任的，而远程代码被看作是不受信的。对于授信的本地代码，可以访问一切本地资源，而对于非授信的远程代码不可以访问本地资源，其实依赖于沙箱机制。如此严格的安全机制也给程序的功能扩展带来障碍，比如当用户希望远程代码访问本地系统的文件时候，就无法实现
-* JDK1.1：针对安全机制做了改进，增加了安全策略。允许用户指定代码对本地资源的访问权限
-* JDK1.2：改进了安全机制，增加了代码签名，不论本地代码或是远程代码都会按照用户的安全策略设定，由类加载器加载到虚拟机中权限不同的运行空间，来实现差异化的代码执行权限控制
-* JDK1.6：当前最新的安全机制，引入了域（Domain）的概念。虚拟机会把所有代码加载到不同的系统域和应用域，不同的保护域对应不一样的权限。系统域部分专门负责与关键资源进行交互，而各个应用域部分则通过系统域的部分代理来对各种需要的资源进行访问
-
-<img src="https://foruda.gitee.com/images/1680779146000794457/d28231a4_8616658.png" style="zoom:67%;" />
-
-
-
-***
-
-
-
-#### 自定义
-
-对于自定义类加载器的实现，只需要继承 ClassLoader 类，覆写 findClass 方法即可
-
-作用：隔离加载类、修改类加载的方式、拓展加载源、防止源码泄漏
-
-```java
-//自定义类加载器，读取指定的类路径classPath下的class文件
-public class MyClassLoader extends ClassLoader{
-    private String classPath;
-
-    public MyClassLoader(String classPath) {
-        this.classPath = classPath;
-    }
-    
-     public MyClassLoader(ClassLoader parent, String byteCodePath) {
-        super(parent);
-        this.classPath = classPath;
-    }
-
-    @Override
-    protected Class<?> findClass(String name) throws ClassNotFoundException {
-       BufferedInputStream bis = null;
-        ByteArrayOutputStream baos = null;
-        try {
-            // 获取字节码文件的完整路径
-            String fileName = classPath + className + ".class";
-            // 获取一个输入流
-            bis = new BufferedInputStream(new FileInputStream(fileName));
-            // 获取一个输出流
-            baos = new ByteArrayOutputStream();
-            // 具体读入数据并写出的过程
-            int len;
-            byte[] data = new byte[1024];
-            while ((len = bis.read(data)) != -1) {
-                baos.write(data, 0, len);
-            }
-            // 获取内存中的完整的字节数组的数据
-            byte[] byteCodes = baos.toByteArray();
-            // 调用 defineClass()，将字节数组的数据转换为 Class 的实例。
-            Class clazz = defineClass(null, byteCodes, 0, byteCodes.length);
-            return clazz;
-        } catch (IOException e) {
-            e.printStackTrace();
-        } finally {
-            try {
-                if (baos != null)
-                    baos.close();
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
-            try {
-                if (bis != null)
-                    bis.close();
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
-        }
-        return null;
-    }
-}
-```
-
-```java
-public static void main(String[] args) {
-    MyClassLoader loader = new MyClassLoader("D:\Workspace\Project\JVM_study\src\java1\");
-
-    try {
-        Class clazz = loader.loadClass("Demo1");
-        System.out.println("加载此类的类的加载器为：" + clazz.getClassLoader().getClass().getName());//MyClassLoader
-
-        System.out.println("加载当前类的类的加载器的父类加载器为：" + clazz.getClassLoader().getParent().getClass().getName());//sun.misc.Launcher$AppClassLoader
-    } catch (ClassNotFoundException e) {
-        e.printStackTrace();
-    }
-}
-```
-
-
-
-****
-
-
-
-#### JDK9
-
-为了保证兼容性，JDK9 没有改变三层类加载器架构和双亲委派模型，但为了模块化系统的顺利运行做了一些变动：
-
-* 扩展机制被移除，扩展类加载器由于**向后兼容性**的原因被保留，不过被重命名为平台类加载器（platform classloader），可以通过 ClassLoader 的新方法 getPlatformClassLoader() 来获取
-
-* JDK9 基于模块化进行构建（原来的 rt.jar 和 tools.jar 被拆分成数个 JMOD 文件），其中 Java 类库就满足了可扩展的需求，那就无须再保留 `<JAVA_HOME>\lib\ext` 目录，此前使用这个目录或者 `java.ext.dirs` 系统变量来扩展 JDK 功能的机制就不需要再存在
-
-* 启动类加载器、平台类加载器、应用程序类加载器全都继承于 `jdk.internal.loader.BuiltinClassLoader`
 
 
 
@@ -2974,68 +2263,51 @@ Java 语言：跨平台的语言（write once ，run anywhere）
 
 
 
-#### 类结构
+## 类结构
 
-##### 文件结构
+### Class类文件结构
 
-字节码是一种二进制的类文件，是编译之后供虚拟机解释执行的二进制字节码文件，**一个 class 文件对应一个 public 类型的类或接口**
+任何一个Class文件都对应着唯一的一个类或接口的定义信息，但是类或接口不一定都定义在文件总，可以动态生成直接送入类加载其中。
 
-字节码内容是 **JVM 的字节码指令**，不是机器码，C、C++ 经由编译器直接生成机器码，所以执行效率比 Java 高
+Class文件是一组以8个字节为基础单位的**二进制流**，存储的是JVM字节码指令而不是机器码，各个数据项目严格按照顺序紧凑地排列在文件之中，中间没有添加任何分隔符，这使得整个Class文件中存储的内容几乎全部是程序运行的必要数据，没有空隙存在。当遇到需要占用8个字节以上空间的数据项时，则会按照高位在前[2]的方式分割成若干个8个字节进行存储。
 
 JVM 官方文档：https://docs.oracle.com/javase/specs/jvms/se8/html/index.html
 
-根据 JVM 规范，类文件结构如下：
+根据《Java虚拟机规范》的规定，Class文件格式采用一种类似于C语言结构体的伪结构来存储数据，这种伪结构中只有两种数据类型：“无符号数”和“表” 。
+
+- 无符号数属于**基本的数据类型**，以u1、u2、u4、u8来分别代表1个字节、2个字节、4个字节和8个字节的无符号数，无符号数可以用来描述数字、索引引用、数量值或者按照UTF-8编码构成字符串值。
+- 表是由**多个无符号数或者其他表作为数据项**构成的复合数据类型，为了便于区分，所有表的命名都习惯性地以“_info”结尾。表用于描述有层次关系的复合结构的数据，整个Class文件本质上也可以视作是一张表。
+
+Class文件结构如下：
 
 ```java
 ClassFile {
-	u4 				magic;						
-    u2 				minor_version;						
-    u2 				major_version;						
-    u2 				constant_pool_count;
-    cp_info			constant_pool[constant_pool_count-1];
-    u2	 			access_flags;
-    u2 				this_class;
-    u2 				super_class;
-    u2 				interfaces_count;
-    u2 				interfaces[interfaces_count];
-    u2 				fields_count;
-    field_info 		fields[fields_count];
-    u2 				methods_count;
-    method_info 	methods[methods_count];
-    u2 				attributes_count;
-    attribute_info 	attributes[attributes_count];
+	u4 				magic; //魔数，识别类文件格式	4个字节					
+    u2 				minor_version;	//副版本号(小版本)2个字节				
+    u2 				major_version; //主版本号(小版本)2个字节						
+    u2 				constant_pool_count;//常量池计数器2个字节
+    cp_info			constant_pool[constant_pool_count-1];//常量池表n个字节
+    u2	 			access_flags;//访问标识2个字节
+    u2 				this_class;//类索引2个字节
+    u2 				super_class;//父类索引2个字节
+    u2 				interfaces_count;//接口计数2个字节
+    u2 				interfaces[interfaces_count];//接口索引集合2个字节
+    u2 				fields_count;//字段计数器2个字节
+    field_info 		fields[fields_count];//字段表n个字节
+    u2 				methods_count;//方法计数器2个字节
+    method_info 	methods[methods_count];//方法表n个字节
+    u2 				attributes_count;//属性计数器2个字节
+    attribute_info 	attributes[attributes_count];//属性表n个字节
 }
 ```
 
-| 类型             | 名称                  | 说明         | 长度   | 数量                    |
-| -------------- | ------------------- | ---------- | ---- | --------------------- |
-| u4             | magic               | 魔数，识别类文件格式 | 4个字节 | 1                     |
-| u2             | minor_version       | 副版本号(小版本)  | 2个字节 | 1                     |
-| u2             | major_version       | 主版本号(大版本)  | 2个字节 | 1                     |
-| u2             | constant_pool_count | 常量池计数器     | 2个字节 | 1                     |
-| cp_info        | constant_pool       | 常量池表       | n个字节 | constant_pool_count-1 |
-| u2             | access_flags        | 访问标识       | 2个字节 | 1                     |
-| u2             | this_class          | 类索引        | 2个字节 | 1                     |
-| u2             | super_class         | 父类索引       | 2个字节 | 1                     |
-| u2             | interfaces_count    | 接口计数       | 2个字节 | 1                     |
-| u2             | interfaces          | 接口索引集合     | 2个字节 | interfaces_count      |
-| u2             | fields_count        | 字段计数器      | 2个字节 | 1                     |
-| field_info     | fields              | 字段表        | n个字节 | fields_count          |
-| u2             | methods_count       | 方法计数器      | 2个字节 | 1                     |
-| method_info    | methods             | 方法表        | n个字节 | methods_count         |
-| u2             | attributes_count    | 属性计数器      | 2个字节 | 1                     |
-| attribute_info | attributes          | 属性表        | n个字节 | attributes_count      |
 
-Class 文件格式采用一种类似于 C 语言结构体的方式进行数据存储，这种结构中只有两种数据类型：无符号数和表
-
-* 无符号数属于基本的数据类型，以 u1、u2、u4、u8 来分别代表1个字节、2个字节、4个字节和8个字节的无符号数，无符号数可以用来描述数字、索引引用、数量值或者按照 UTF-8 编码构成字符串
-* 表是由多个无符号数或者其他表作为数据项构成的复合数据类型，表都以 `_info` 结尾，用于描述有层次关系的数据，整个 Class 文件本质上就是一张表，由于表没有固定长度，所以通常会在其前面加上个数说明
 
 获取方式：
 
-* HelloWorld.java 执行 `javac -parameters -d . HellowWorld.java`指令
-* 写入文件指令 `javap -v xxx.class >xxx.txt`
-* IDEA 插件 jclasslib 
+* HelloWorld.java 执行 `javac -parameters -d . HellowWorld.java`指令；
+* 写入文件指令 `javap -v xxx.class >xxx.txt；`
+* IDEA 插件 jclasslib 。
 
 
 ***
@@ -3044,15 +2316,13 @@ Class 文件格式采用一种类似于 C 语言结构体的方式进行数据�
 
 ##### 魔数版本
 
-魔数：每个 Class 文件开头的 4 个字节的无符号整数称为魔数（Magic Number），是 Class 文件的标识符，代表这是一个能被虚拟机接受的有效合法的 Class 文件，
+魔数：每个 Class 文件开头的 4 个字节的无符号整数称为魔数（Magic Number），是 Class 文件的标识符，用于确定这个文件是否能被虚拟机接受的 Class 文件。
 
 * 魔数值固定为 0xCAFEBABE，不符合则会抛出错误
 
 * 使用魔数而不是扩展名来进行识别主要是基于安全方面的考虑，因为文件扩展名可以随意地改动
 
-版本：4 个 字节，5 6两个字节代表的是编译的副版本号 minor_version，而 7 8 两个字节是编译的主版本号 major_version
-
-* 不同版本的 Java 编译器编译的 Class 文件对应的版本是不一样的，高版本的 Java 虚拟机可以执行由低版本编译器生成的 Class 文件，反之 JVM 会抛出异常 `java.lang.UnsupportedClassVersionError`
+版本：4 个 字节，第5和第6两个字节代表的是编译的副版本号 minor_version，而第7和第8 两个字节是编译的主版本号 major_version。不同版本的 Java 编译器编译的 Class 文件对应的版本是不一样的，高版本的 Java 虚拟机可兼容由低版本编译器生成的 Class 文件，反之 JVM 会抛出异常 `java.lang.UnsupportedClassVersionError`
 
 | 主版本（十进制） | 副版本（十进制） | 编译器版本 |
 | -------- | -------- | ----- |
@@ -3082,33 +2352,31 @@ Class 文件格式采用一种类似于 C 语言结构体的方式进行数据�
 
 ##### 常量池
 
-常量池中常量的数量是不固定的，所以在常量池的入口需要放置一项 u2 类型的无符号数，代表常量池计数器（constant_pool_count），这个容量计数是从 1 而不是 0 开始，是为了满足后面某些指向常量池的索引值的数据在特定情况下需要表达不引用任何一个常量池项目，这种情况可用索引值 0 来表示
+常量池可以比作Class文件里的资源仓库，常量池中常量的数量是不固定的，所以在常量池的入口需要放置一项 u2 类型的无符号数，代表常量池计数器（constant_pool_count），这个容量计数是从 1 而不是 0 开始，是为了满足后面某些指向常量池的索引值的数据在特定情况下需要表达“不引用任何一个常量池项目”，这种情况可用索引值 0 来表示。
 
-constant_pool 是一种表结构，以1 ~ constant_pool_count - 1为索引，表明有多少个常量池表项。表项中存放编译时期生成的各种字面量和符号引用，这部分内容将在类加载后进入方法区的运行时常量池
+constant_pool 是一种表结构，以1 ~ constant_pool_count - 1为索引，表明有多少个常量池表项。表项中存放编译时期生成的各种字面量和符号引用，这部分内容将在类加载后进入方法区的运行时常量池。
 
-* 字面量（Literal） ：基本数据类型、字符串类型常量、声明为 final 的常量值等
+* 字面量（Literal） ：基本数据类型、字符串类型常量、声明为 final 的常量值等；
 
-* 符号引用（Symbolic References）：类和接口的全限定名、字段的名称和描述符、方法的名称和描述符
+* 符号引用（Symbolic References）：类和接口的全限定名、字段的名称和描述符、方法的名称和描述符；
 
-  * 全限定名：com/test/Demo 这个就是类的全限定名，仅仅是把包名的 `.` 替换成 `/`，为了使连续的多个全限定名之间不产生混淆，在使用时最后一般会加入一个 `;` 表示全限定名结束
+  * 全限定名：`com/test/Demo` 这个就是类的全限定名，仅仅是把包名的 `.` 替换成 `/`，为了使连续的多个全限定名之间不产生混淆，在使用时最后一般会加入一个 `;` 表示全限定名结束；
+  * 简单名称：指没有类型和参数修饰的方法或者字段名称，比如字段 `x` 的简单名称就是 `x` ；
+  * 描述符：用来描述字段的数据类型、方法的参数列表（包括数量、类型以及顺序）和返回值；
 
-  * 简单名称：指没有类型和参数修饰的方法或者字段名称，比如字段 x 的简单名称就是 x
-
-  * 描述符：用来描述字段的数据类型、方法的参数列表（包括数量、类型以及顺序）和返回值
-
-    | 标志符  | 含义                                       |
-    | ---- | ---------------------------------------- |
-    | B    | 基本数据类型 byte                              |
-    | C    | 基本数据类型 char                              |
-    | D    | 基本数据类型 double                            |
-    | F    | 基本数据类型 float                             |
-    | I    | 基本数据类型 int                               |
-    | J    | 基本数据类型 long                              |
-    | S    | 基本数据类型 short                             |
-    | Z    | 基本数据类型 boolean                           |
-    | V    | 代表 void 类型                               |
-    | L    | 对象类型，比如：`Ljava/lang/Object;`，不同方法间用`;`隔开 |
-    | [    | 数组类型，代表一维数组。比如：`double[][][] is [[[D`    |
+| 标志符  | 含义                                       |
+| ---- | ---------------------------------------- |
+| B    | 基本数据类型 byte                              |
+| C    | 基本数据类型 char                              |
+| D    | 基本数据类型 double                            |
+| F    | 基本数据类型 float                             |
+| I    | 基本数据类型 int                               |
+| J    | 基本数据类型 long                              |
+| S    | 基本数据类型 short                             |
+| Z    | 基本数据类型 boolean                           |
+| V    | 代表 void 类型                               |
+| L    | 对象类型，比如：`Ljava/lang/Object;`，不同方法间用`;`隔开 |
+| [    | 数组类型，代表一维数组。比如：`double[][][] is [[[D`    |
 
 常量类型和结构：
 
@@ -3129,7 +2397,7 @@ constant_pool 是一种表结构，以1 ~ constant_pool_count - 1为索引，表
 | CONSTANT_MethodType_info         | 16      | 标志方法类型      |
 | CONSTANT_InvokeDynamic_info      | 18      | 表示一个动态方法调用点 |
 
-18 种常量没有出现 byte、short、char，boolean 的原因：编译之后都可以理解为 Integer
+18 种常量没有出现 byte、short、char，boolean 的原因：编译之后都可以理解为 Integer  。
 
 
 
@@ -3139,11 +2407,11 @@ constant_pool 是一种表结构，以1 ~ constant_pool_count - 1为索引，表
 
 ##### 访问标识
 
-访问标识（access_flag），又叫访问标志、访问标记，该标识用两个字节表示，用于识别一些类或者接口层次的访问信息，包括这个 Class 是类还是接口，是否定义为 public类型，是否定义为 abstract类型等
+访问标识（access_flag），又叫访问标志、访问标记，该标识用两个字节表示，用于识别一些类或者接口层次的访问信息，包括这个 Class 是类还是接口，是否定义为 public类型，是否定义为 abstract类型等。
 
-* 类的访问权限通常为 ACC_ 开头的常量
-* 每一种类型的表示都是通过设置访问标记的 32 位中的特定位来实现的，比如若是 public final 的类，则该标记为 `ACC_PUBLIC | ACC_FINAL`
-* 使用 `ACC_SUPER` 可以让类更准确地定位到父类的方法，确定类或接口里面的 invokespecial 指令使用的是哪一种执行语义，现代编译器都会设置并且使用这个标记
+* 类的访问权限通常为 ACC_ 开头的常量；
+* 每一种类型的表示都是通过设置访问标记的 32 位中的特定位来实现的，比如若是 public final 的类，则该标记为 `ACC_PUBLIC | ACC_FINAL` ；
+* 使用 `ACC_SUPER` 可以让类更准确地定位到父类的方法，确定类或接口里面的invokespecial 指令使用的是哪一种执行语义，现代编译器都会设置并且使用这个标记。
 
 | 标志名称           | 标志值    | 含义                                       |
 | -------------- | ------ | ---------------------------------------- |
@@ -3164,15 +2432,15 @@ constant_pool 是一种表结构，以1 ~ constant_pool_count - 1为索引，表
 
 ##### 索引集合
 
-类索引、父类索引、接口索引集合
+类索引、父类索引、接口索引集合。
 
-* 类索引用于确定这个类的全限定名
+* 类索引用于确定这个类的全限定名；
 
-* 父类索引用于确定这个类的父类的全限定名，Java 语言不允许多重继承，所以父类索引只有一个，除了Object 之外，所有的 Java 类都有父类，因此除了 java.lang.Object 外，所有 Java 类的父类索引都不为0
+* 父类索引用于确定这个类的父类的全限定名，Java 语言不允许多重继承，所以父类索引只有一个，除了Object 之外，所有的 Java 类都有父类，因此除了 java.lang.Object 外，所有 Java 类的父类索引都不为0；
 
-* 接口索引集合就用来描述这个类实现了哪些接口
-  * interfaces_count 项的值表示当前类或接口的直接超接口数量
-  * interfaces[] 接口索引集合，被实现的接口将按 implements 语句后的接口顺序从左到右排列在接口索引集合中
+* 接口索引集合就用来描述这个类实现了哪些接口：
+  * interfaces_count 项的值表示当前类或接口的直接超接口数量；
+  * interfaces[] 接口索引集合，被实现的接口将按 implements 语句后的接口顺序从左到右排列在接口索引集合中；
 
 | 长度   | 含义                           |
 | ---- | ---------------------------- |
@@ -3189,27 +2457,25 @@ constant_pool 是一种表结构，以1 ~ constant_pool_count - 1为索引，表
 
 ##### 字段表
 
-字段 fields 用于描述接口或类中声明的变量，包括类变量以及实例变量，但不包括方法内部、代码块内部声明的局部变量以及从父类或父接口继承。字段叫什么名字、被定义为什么数据类型，都是无法固定的，只能引用常量池中的常量来描述
+字段 fields 用于描述接口或类中声明的变量。包括类变量以及实例变量，但不包括方法内部、代码块内部声明的局部变量以及从父类或父接口继承。字段叫什么名字、被定义为什么数据类型，都是无法固定的，只能引用常量池中的常量来描述。
 
-fields_count（字段计数器），表示当前 class 文件 fields 表的成员个数，用两个字节来表示
+fields_count（字段计数器），表示当前 class 文件 fields 表的成员个数，用两个字节来表示。
 
-fields[]（字段表）：
+fields[]（字段表）：表中的每个成员都是一个 fields_info 结构的数据项，用于表示当前类或接口中某个字段的完整描述。
 
-* 表中的每个成员都是一个 fields_info 结构的数据项，用于表示当前类或接口中某个字段的完整描述
+- 字段访问标识：
 
-* 字段访问标识：
-
-  | 标志名称          | 标志值    | 含义             |
-  | ------------- | ------ | -------------- |
-  | ACC_PUBLIC    | 0x0001 | 字段是否为public    |
-  | ACC_PRIVATE   | 0x0002 | 字段是否为private   |
-  | ACC_PROTECTED | 0x0004 | 字段是否为protected |
-  | ACC_STATIC    | 0x0008 | 字段是否为static    |
-  | ACC_FINAL     | 0x0010 | 字段是否为final     |
-  | ACC_VOLATILE  | 0x0040 | 字段是否为volatile  |
-  | ACC_TRANSTENT | 0x0080 | 字段是否为transient |
-  | ACC_SYNCHETIC | 0x1000 | 字段是否为由编译器自动产生  |
-  | ACC_ENUM      | 0x4000 | 字段是否为enum      |
+| 标志名称          | 标志值    | 含义             |
+| ------------- | ------ | -------------- |
+| ACC_PUBLIC    | 0x0001 | 字段是否为public    |
+| ACC_PRIVATE   | 0x0002 | 字段是否为private   |
+| ACC_PROTECTED | 0x0004 | 字段是否为protected |
+| ACC_STATIC    | 0x0008 | 字段是否为static    |
+| ACC_FINAL     | 0x0010 | 字段是否为final     |
+| ACC_VOLATILE  | 0x0040 | 字段是否为volatile  |
+| ACC_TRANSTENT | 0x0080 | 字段是否为transient |
+| ACC_SYNCHETIC | 0x1000 | 字段是否为由编译器自动产生  |
+| ACC_ENUM      | 0x4000 | 字段是否为enum      |
 
 * 字段名索引：根据该值查询常量池中的指定索引项即可
 
@@ -3248,17 +2514,19 @@ fields[]（字段表）：
 
 ##### 方法表
 
-方法表是 methods 指向常量池索引集合，其中每一个 method_info 项都对应着一个类或者接口中的方法信息，完整描述了每个方法的签名
+方法表是 methods 指向常量池索引集合，其中每一个 method_info 项都对应着一个类或者接口中的方法信息，完整描述了每个方法的签名。
 
-* 如果这个方法不是抽象的或者不是 native 的，字节码中就会体现出来
-* methods 表只描述当前类或接口中声明的方法，不包括从父类或父接口继承的方法
-* methods 表可能会出现由编译器自动添加的方法，比如初始化方法 <cinit> 和实例化方法 <init>
+* 如果这个方法不是抽象的或者不是 native 的，字节码中就会体现出来；
+* methods 表只描述当前类或接口中声明的方法，不包括从父类或父接口继承的方法；
+* methods 表可能会出现由编译器自动添加的方法，比如初始化方法 <cinit> 和实例化方法 <init> 。
 
-**重载（Overload）**一个方法，除了要与原方法具有相同的简单名称之外，还要求必须拥有一个与原方法不同的特征签名，特征签名就是一个方法中各个参数在常量池中的字段符号引用的集合，因为返回值不会包含在特征签名之中，因此 Java 语言里无法仅仅依靠返回值的不同来对一个已有方法进行重载。但在 Class 文件格式中，特征签名的范围更大一些，只要描述符不是完全一致的两个方法就可以共存
+方法里的Java代码，经过Javac编译器编译成字节码指令之后，存放在方法属性表集合中的一个名为“Code”的属性里面。
 
-methods_count（方法计数器）：表示 class 文件 methods 表的成员个数，使用两个字节来表示
+**重载（Overload）**一个方法，除了要与原方法具有相同的简单名称之外，还要求必须拥有一个与原方法不同的特征签名，**特征签名就是一个方法中各个参数在常量池中的字段符号引用的集合**，因为返回值不会包含在特征签名之中，因此 Java 语言里无法仅仅依靠返回值的不同来对一个已有方法进行重载。但在 Class 文件格式中，特征签名的范围更大一些，只要描述符不是完全一致的两个方法就可以共存。
 
-methods[]（方法表）：每个表项都是一个 method_info 结构，表示当前类或接口中某个方法的完整描述
+methods_count（方法计数器）：表示 class 文件 methods 表的成员个数，使用两个字节来表示。
+
+methods[]（方法表）：每个表项都是一个 method_info 结构，表示当前类或接口中某个方法的完整描述。
 
 * 方法表结构如下：
 
@@ -3291,11 +2559,11 @@ methods[]（方法表）：每个表项都是一个 method_info 结构，表示�
 
 ##### 属性表
 
-属性表集合，指的是 Class 文件所携带的辅助信息，比如该 Class 文件的源文件的名称，以及任何带有 `RetentionPolicy.CLASS` 或者 `RetentionPolicy.RUNTIME` 的注解，这类信息通常被用于 Java 虚拟机的验证和运行，以及 Java 程序的调试。字段表、方法表都可以有自己的属性表，用于描述某些场景专有的信息
+属性表集合，指的是 Class 文件所携带的**辅助信息**，比如该 Class 文件的源文件的名称，以及任何带有 `RetentionPolicy.CLASS` 或者 `RetentionPolicy.RUNTIME` 的注解，这类信息通常被用于 Java 虚拟机的验证和运行，以及 Java 程序的调试。字段表、方法表都可以有自己的属性表，用于描述某些场景专有的信息。
 
-attributes_ count（属性计数器）：表示当前文件属性表的成员个数
+attributes_ count（属性计数器）：表示当前文件属性表的成员个数；
 
-attributes[]（属性表）：属性表的每个项的值必须是 attribute_info 结构
+attributes[]（属性表）：属性表的每个项的值必须是 attribute_info 结构；
 
 * 属性的通用格式：
 
@@ -3337,11 +2605,1069 @@ attributes[]（属性表）：属性表的每个项的值必须是 attribute_inf
 
 ****
 
+## 虚拟机类加载机制
+
+虚拟机类加载机制就是把描述类的数据从Class文件加载到内存，并对数据进行校验、转换解析和初始化，最终形成可以被虚拟机直接使用的Java类型。
+
+### 类生命周期
+
+类是在运行期间**第一次使用时动态加载**的（不使用不加载），而不是一次性加载所有类，因为一次性加载会占用很多的内存，加载的类信息存放于一块成为方法区的内存空间。
+
+![输入图片说明](https://foruda.gitee.com/images/1680746577485342162/7a3bcfdb_8616658.png "屏幕截图")
+
+#### 1、加载阶段
+
+加载是类加载的其中一个阶段，注意不要混淆。加载过程完成以下三件事：
+
+- 通过类的全限定名称获取定义该类的二进制字节流（**二进制字节码**）；
+- 将该字节流表示的静态存储结构转换为方法区的运行时存储结构（**Java 类模型**）；
+- 将字节码文件加载到内存后，在**方法区中生成一个类模板对象**，在**堆**中生成一个**代表该类的 Class 对象**，作为该类在方法区中的各种数据的访问入口。
+
+其中二进制字节流可以从以下方式中获取：
+
+- 从 ZIP 包读取，成为 JAR、EAR、WAR 格式的基础；
+- 从网络中获取，最典型的应用是 Applet；
+- 由其他文件生成，例如由 JSP 文件生成对应的 Class 类；
+- 运行时计算生成，例如动态代理技术，在 java.lang.reflect.Proxy 使用 ProxyGenerator.generateProxyClass 生成字节码；
+
+方法区内部采用 C++ 的 instanceKlass 描述 Java 类的数据结构：
+
+- `_java_mirror` 即 Java 的类镜像，例如对 String 来说就是 String.class，作用是把 class 暴露给 Java 使用
+- `_super` 即父类、`_fields` 即成员变量、`_methods` 即方法、`_constants` 即常量池、`_class_loader` 即类加载器、`_vtable` **虚方法表**、`_itable` 接口方法表
+
+加载过程：
+
+- 如果这个类还有父类没有加载，先加载父类；
+- **加载和链接可能是交替运行的** ；
+- Class 对象和 _java_mirror 相互持有对方的地址，堆中对象通过 instanceKlass 和元空间进行交互。
+
+<img src="https://seazean.oss-cn-beijing.aliyuncs.com/img/Java/JVM-类的生命周期-加载.png" style="zoom:80%;" />
+
+创建数组类有些特殊，因为数组类本身并不是由类加载器负责创建，而是由 JVM 在运行时根据需要而直接创建的，但数组的元素类型仍然需要依靠类加载器去创建，创建数组类的过程：
+
+- 如果数组的元素类型是引用类型，那么遵循定义的加载过程递归加载和创建数组的元素类型；
+- JVM 使用指定的元素类型和数组维度来创建新的数组类；
+- **基本数据类型由启动类加载器加载** 。
+
+------
+
+#### 2、链接阶段
+
+##### 2.1 验证
+
+确保 Class 文件的字节流中包含的信息是否符合 JVM 规范，保证被加载类的正确性，不会危害虚拟机自身的安全。
+
+主要包括**四种验证**：
+
+- **文件格式验证**；
+- **语义检查**，但凡在语义上不符合规范的，虚拟机不会给予验证通过；
+  - 是否所有的类都有父类的存在（除了 Object 外，其他类都应该有父类）；
+  - 是否一些被定义为 final 的方法或者类被重写或继承了；
+  - 非抽象类是否实现了所有抽象方法或者接口方法；
+  - 是否存在不兼容的方法。
+- **字节码验证**，试图通过对字节码流的分析，判断字节码是否可以被正确地执行；
+  - 在字节码的执行过程中，是否会跳转到一条不存在的指令；
+  - 函数的调用是否传递了正确类型的参数；
+  - 变量的赋值是不是给了正确的数据类型；
+  - 栈映射帧（StackMapTable）在这个阶段用于检测在特定的字节码处，其局部变量表和操作数栈是否有着正确的数据类型。
+- **符号引用验证**，Class 文件在其常量池会通过字符串记录将要使用的其他类或者方法。
+
+------
 
 
-#### 编译指令
 
-##### javac
+##### 2.2 准备
+
+准备阶段为**静态变量（类变量）分配内存并设置默认初始值**，使用的是方法区的内存。
+
+说明：实例变量不会在这阶段分配内存，它会在对象实例化时随着对象一起被分配在堆中，类加载发生在所有实例化操作之前，并且类加载只进行一次，实例化可以进行多次。
+
+类变量初始化：
+
+- static 变量分配空间和赋值是两个步骤：**分配空间在准备阶段完成，赋值在初始化阶段完成** ；
+- 如果 static 变量是 **final 的基本类型以及字符串常量**，那么编译阶段值（方法区）就确定了，准备阶段会显式初始化；
+- 如果 static 变量是 **final引用类型或者构造器方法的字符串**，赋值在初始化阶段完成。
+
+实例：
+
+- 初始值一般为 0 值，例如下面的类变量 value 被初始化为 0 而不是 123；
+
+  ```java
+  public static int value = 123;
+  ```
+
+- 常量 value 被初始化为 123 而不是 0；
+
+  ```java
+  public static final int value = 123;
+  ```
+
+- Java 并不支持 boolean 类型，对于 boolean 类型，内部实现是 int，由于 int 的默认值是 0，故 boolean 的默认值就是 false。
+
+------
+
+
+
+##### 2.3 解析
+
+将常量池中类、接口、字段、方法的**符号引用替换为直接引用**（内存地址）的过程；
+
+- 符号引用：一组符号来描述目标，可以是任何字面量，属于编译原理方面的概念，如：包括类和接口的全限名、字段的名称和描述符、方法的名称和**方法描述符**（因为类还没有加载完，很多方法是找不到的）；
+- 直接引用：直接指向目标的指针、相对偏移量或一个间接定位到目标的句柄，如果有了直接引用，那说明引用的目标必定已经存在于内存之中；
+
+例如：在 `com.demo.Solution` 类中引用了 `com.test.Quest`，把 `com.test.Quest` 作为符号引用存进类常量池，在类加载完后，**用这个符号引用去方法区找这个类的内存地址**
+
+解析动作主要针对类或接口、字段、类方法、接口方法、方法类型等；
+
+- 在类加载阶段解析的是非虚方法，静态绑定；
+- 也可以在初始化阶段之后再开始解析，这是为了支持 Java 的**动态绑定** ；
+- 通过解析操作，符号引用就可以转变为目标方法在类的虚方法表中的位置，从而使得方法被成功调用。
+
+```java
+public class Load2 {
+    public static void main(String[] args) throws Exception{
+    ClassLoader classloader = Load2.class.getClassLoader();
+    // cloadClass 加载类方法不会导致类的解析和初始化，也不会加载D
+    Class<?> c = classloader.loadClass("cn.jvm.t3.load.C");
+        
+    // new C();会导致类的解析和初始化，从而解析初始化D
+    System.in.read();
+    }
+}
+class C {
+	D d = new D();
+}
+class D {
+}
+```
+
+
+
+------
+
+
+
+#### 3、初始化
+
+##### 介绍
+
+初始化阶段才真正开始执行类中定义的 Java 程序代码，在**准备阶段**，类变量已经赋过一次系统要求的**默认初始值**；在初始化阶段，通过程序制定的计划去初始化类变量和其它资源，执行  `<clinit>` 。
+
+在编译生成 class 文件时，编译器会产生两个方法加于 class 文件中，一个是类的初始化方法 clinit，另一个是实例的初始化方法 init 。
+
+类构造器  `<clinit>()`  与实例构造器  `<init>()` 不同，它不需要程序员进行显式调用，在一个类的生命周期中，类构造器最多被虚拟机**调用一次**，而实例构造器则会被虚拟机调用多次，只要程序员创建对象。
+
+类在第一次实例化加载一次，把 class 读入内存，后续实例化不再加载，引用第一次加载的类。
+
+
+
+------
+
+
+
+##### clinit
+
+ `<clinit>()`：类构造器，由编译器自动收集类中**所有类变量的赋值动作和静态语句块**中的语句合并产生的，初始化阶段会先执行`<clint>()`方法，会为静态类变量显示赋值并执行静态代码块。
+
+作用：是在类加载过程中的初始化阶段进行静态变量初始化和执行静态代码块；
+
+- 如果类中没有静态变量或静态代码块，那么 clinit 方法将不会被生成；
+- clinit 方法只执行一次，在执行 clinit 方法时，必须先执行父类的clinit方法；
+- static 变量的赋值操作和静态代码块的合并顺序由源文件中出现的顺序决定；
+- static 不加 final 的变量都在初始化环节赋值。
+
+**线程安全**问题：
+
+- 虚拟机会保证一个类的  `<clinit>()` 方法在多线程环境下被正确的加锁和同步，如果多个线程同时初始化一个类，只会有一个线程执行这个类的  `<clinit>()` 方法，其它线程都阻塞等待，直到活动线程执行  `<clinit>()` 方法完毕；
+- 如果在一个类的  `<clinit>()` 方法中有耗时的操作，就可能造成多个线程阻塞，在实际过程中此种阻塞很隐蔽。
+
+特别注意：静态语句块只能访问到定义在它之前的类变量，定义在它之后的类变量只能赋值，不能访问 。
+
+```java
+public class Test {
+    static {
+        //i = 0;                // 给变量赋值可以正常编译通过
+        System.out.print(i);  	// 这句编译器会提示“非法向前引用”
+    }
+    static int i = 1;
+}
+```
+
+接口中不可以使用静态语句块，但仍然有类变量初始化的赋值操作，因此接口与类一样都会生成  `<clinit>()` 方法，两者不同的是：
+
+- 在初始化一个接口时，并不会先初始化它的父接口，所以执行接口的  `<clinit>()` 方法不需要先执行父接口的     `<clinit>()` 方法；
+- 在初始化一个类时，不会先初始化所实现的接口，所以接口的实现类在初始化时不会执行接口的  `<clinit>()` 方法；
+- 只有当父接口中定义的变量使用时，父接口才会初始化。
+
+------
+
+
+
+##### 时机
+
+类的初始化是懒惰的，只有在首次使用时才会被装载，JVM 不会无条件地装载 Class 类型，Java 虚拟机规定，一个类或接口在初次使用前，必须要进行初始化
+
+**主动引用**：虚拟机规范中并没有强制约束何时进行加载，但是规范严格规定了有且只有下列情况必须对类进行初始化（加载、验证、准备都会发生）：
+
+- 当创建一个类的实例时，使用 new 关键字，或者通过反射、克隆、反序列化（前文讲述的对象的创建时机）
+- 当调用类的静态方法或访问静态字段时，遇到 getstatic、putstatic、invokestatic 这三条字节码指令，如果类没有进行过初始化，则必须先触发其初始化
+  - getstatic：程序访问类的静态变量（不是静态常量，常量会被加载到运行时常量池）
+  - putstatic：程序给类的静态变量赋值
+  - invokestatic ：调用一个类的静态方法
+- 使用 java.lang.reflect 包的方法对类进行反射调用时，如果类没有进行初始化，则需要先触发其初始化
+- 当初始化一个类的时候，如果发现其父类还没有进行过初始化，则需要先触发其父类的初始化，但这条规则并**不适用于接口**
+- 当虚拟机启动时，需要指定一个要执行的主类（包含 main() 方法的那个类），虚拟机会先初始化这个主类
+- MethodHandle 和 VarHandle 可以看作是轻量级的反射调用机制，而要想使用这两个调用， 就必须先使用 findStaticVarHandle 来初始化要调用的类
+- 补充：当一个接口中定义了 JDK8 新加入的默认方法（被 default 关键字修饰的接口方法）时，如果有这个接口的实现类发生了初始化，那该接口要在其之前被初始化
+
+**被动引用**：所有引用类的方式都不会触发初始化，称为被动引用
+
+- 通过子类引用父类的静态字段，不会导致子类初始化，只会触发父类的初始化
+- 通过数组定义来引用类，不会触发此类的初始化。该过程会对数组类进行初始化，数组类是一个由虚拟机自动生成的、直接继承自 Object 的子类，其中包含了数组的属性和方法
+- 常量（final 修饰）在编译阶段会存入调用类的常量池中，本质上没有直接引用到定义常量的类，因此不会触发定义常量的类的初始化
+- 调用 ClassLoader 类的 loadClass() 方法加载一个类，并不是对类的主动使用，不会导致类的初始化
+
+------
+
+
+
+##### init
+
+init 指的是实例构造器，主要作用是在类实例化过程中执行，执行内容包括**成员变量**初始化和**代码块**的执行
+
+实例化即调用 <init>()V ，虚拟机会保证这个类的构造方法的线程安全，先为实例变量分配内存空间，再执行赋默认值，然后根据源码中的顺序执行赋初值或代码块，没有成员变量初始化和代码块则不会执行
+
+类实例化过程：**父类的类构造器<clinit>() -> 子类的类构造器<clinit>() -> 父类的成员变量和实例代码块 -> 父类的构造函数 -> 子类的成员变量和实例代码块 -> 子类的构造函数**
+
+new 关键字会创建对象并复制 dup 一个对象引用，一个调用 <init> 方法，另一个用来赋值给接收者
+
+
+
+------
+
+
+
+#### 4、卸载阶段
+
+时机：执行了 System.exit() 方法，程序正常执行结束，程序在执行过程中遇到了异常或错误而异常终止，由于操作系统出现错误而导致Java 虚拟机进程终止
+
+卸载类即该类的 **Class 对象被 GC**，卸载类需要满足3个要求:
+
+1. 该类的所有的实例对象都已被 GC，也就是说堆不存在该类的实例对象
+2. 该类没有在其他任何地方被引用
+3. 该类的类加载器的实例已被 GC，一般是可替换类加载器的场景，如 OSGi、JSP 的重加载等，很难达成
+
+在 JVM 生命周期类，由 JVM 自带的类加载器加载的类是不会被卸载的，自定义的类加载器加载的类是可能被卸载。因为 JVM 会始终引用启动、扩展、系统类加载器，这些类加载器始终引用它们所加载的类，这些类始终是可及的
+
+***
+
+## 类与类加载器
+
+对于任意一个类，都必须有加载它的类加载器和这个类本身一起共同确立其在Java虚拟机中的唯一性，每一个类加载器都拥有一个独立的类名空间。即比较两个类是否是同一个类（“相等”），必须是由统一个类加载器加载的前提下才有意义。
+
+这里的相等，包括类的 Class 对象的 equals() 方法、isAssignableFrom() 方法、isInstance() 方法的返回结果为 true，也包括使用 instanceof 关键字做对象所属关系判定结果为 true
+
+### 类加载
+
+类加载方式：
+
+- 隐式加载：不直接在代码中调用 ClassLoader 的方法加载类对象
+  - 创建类对象、使用类的静态域、创建子类对象、使用子类的静态域
+  - 在 JVM 启动时，通过三大类加载器加载 class
+- 显式加载：
+  - ClassLoader.loadClass(className)：只加载和连接，**不会进行初始化**
+  - Class.forName(String name, boolean initialize, ClassLoader loader)：使用 loader 进行加载和连接，根据参数 initialize 决定是否初始化
+
+命名空间：
+
+- 每个类加载器都有自己的命名空间，命名空间由该加载器及所有的父加载器所加载的类组成
+- 在同一命名空间中，不会出现类的完整名字（包括类的包名）相同的两个类
+
+基本特征：
+
+- **可见性**，子类加载器可以访问父加载器加载的类型，但是反过来是不允许的
+- **单一性**，由于父加载器的类型对于子加载器是可见的，所以父加载器中加载过的类型，不会在子加载器中重复加载
+
+------
+
+
+
+#### 加载器
+
+类加载器是 Java 的核心组件，用于加载字节码到 JVM 内存，得到 Class 类的对象
+
+从 Java 虚拟机规范来讲，只存在以下两种不同的类加载器：
+
+- 启动类加载器（Bootstrap ClassLoader）：使用 C++ 实现，是虚拟机自身的一部分；
+- 自定义类加载器（User-Defined ClassLoader）：Java 虚拟机规范**将所有派生于抽象类 ClassLoader 的类加载器都划分为自定义类加载器**，使用 Java 语言实现，独立于虚拟机。
+
+从 Java 开发人员的角度看：
+
+- 启动类加载器（Bootstrap ClassLoader）：
+  - 处于安全考虑，Bootstrap 启动类加载器只加载包名为 java、javax、sun 等开头的类
+  - 类加载器负责加载在 `JAVA_HOME/jre/lib` 或 `sun.boot.class.path` 目录中的，或者被 -Xbootclasspath 参数所指定的路径中的类，并且是虚拟机识别的类库加载到虚拟机内存中
+  - 仅按照文件名识别，如 rt.jar 名字不符合的类库即使放在 lib 目录中也不会被加载
+  - 启动类加载器无法被 Java 程序直接引用，编写自定义类加载器时，如果要把加载请求委派给启动类加载器，直接使用 null 代替
+- 扩展类加载器（Extension ClassLoader）：
+  - 由 ExtClassLoader (sun.misc.Launcher$ExtClassLoader)  实现，上级为 Bootstrap，显示为 null
+  - 将 `JAVA_HOME/jre/lib/ext` 或者被 `java.ext.dir` 系统变量所指定路径中的所有类库加载到内存中
+  - 开发者可以使用扩展类加载器，创建的 JAR 放在此目录下，会由扩展类加载器自动加载
+- 应用程序类加载器（Application ClassLoader）：
+  - 由 AppClassLoader(sun.misc.Launcher$AppClassLoader) 实现，上级为 Extension
+  - 负责加载环境变量 classpath 或系统属性 `java.class.path` 指定路径下的类库
+  - 这个类加载器是 ClassLoader 中的 getSystemClassLoader() 方法的返回值，因此称为系统类加载器
+  - 可以直接使用这个类加载器，如果应用程序中没有自定义类加载器，这个就是程序中默认的类加载器
+- 自定义类加载器：由开发人员自定义的类加载器，上级是 Application
+
+```java
+public static void main(String[] args) {
+    //获取系统类加载器
+    ClassLoader systemClassLoader = ClassLoader.getSystemClassLoader();
+    System.out.println(systemClassLoader);//sun.misc.Launcher$AppClassLoader@18b4aac2
+
+    //获取其上层  扩展类加载器
+    ClassLoader extClassLoader = systemClassLoader.getParent();
+    System.out.println(extClassLoader);//sun.misc.Launcher$ExtClassLoader@610455d6
+
+    //获取其上层 获取不到引导类加载器
+    ClassLoader bootStrapClassLoader = extClassLoader.getParent();
+    System.out.println(bootStrapClassLoader);//null
+
+    //对于用户自定义类来说：使用系统类加载器进行加载
+    ClassLoader classLoader = ClassLoaderTest.class.getClassLoader();
+    System.out.println(classLoader);//sun.misc.Launcher$AppClassLoader@18b4aac2
+
+    //String 类使用引导类加载器进行加载的 --> java核心类库都是使用启动类加载器加载的
+    ClassLoader classLoader1 = String.class.getClassLoader();
+    System.out.println(classLoader1);//null
+
+}
+```
+
+补充两个类加载器：
+
+- SecureClassLoader 扩展了 ClassLoader，新增了几个与使用相关的代码源和权限定义类验证（对 class 源码的访问权限）的方法，一般不会直接跟这个类打交道，更多是与它的子类 URLClassLoader 有所关联
+- ClassLoader 是一个抽象类，很多方法是空的没有实现，而 URLClassLoader 这个实现类为这些方法提供了具体的实现，并新增了 URLClassPath 类协助取得 Class 字节流等功能。在编写自定义类加载器时，如果没有太过于复杂的需求，可以直接继承 URLClassLoader 类，这样就可以避免去编写 findClass() 方法及其获取字节码流的方式，使自定义类加载器编写更加简洁
+
+------
+
+
+
+#### 常用API
+
+ClassLoader 类，是一个抽象类，其后所有的类加载器都继承自 ClassLoader（不包括启动类加载器）
+
+获取 ClassLoader 的途径：
+
+- 获取当前类的 ClassLoader：`clazz.getClassLoader()`
+- 获取当前线程上下文的 ClassLoader：`Thread.currentThread.getContextClassLoader()`
+- 获取系统的 ClassLoader：`ClassLoader.getSystemClassLoader()`
+- 获取调用者的 ClassLoader：`DriverManager.getCallerClassLoader()`
+
+ClassLoader 类常用方法：
+
+- `getParent()`：返回该类加载器的超类加载器  
+- `loadclass(String name)`：加载名为 name 的类，返回结果为 Class 类的实例，**该方法就是双亲委派模式**
+- `findclass(String name)`：查找二进制名称为 name 的类，返回结果为 Class 类的实例，该方法会在检查完父类加载器之后被 loadClass() 方法调用
+- `findLoadedClass(String name)`：查找名称为 name 的已经被加载过的类，final 修饰无法重写
+- `defineClass(String name, byte[] b, int off, int len)`：将**字节流**解析成 JVM 能够识别的类对象
+- `resolveclass(Class<?> c)`：链接指定的 Java 类，可以使类的 Class 对象创建完成的同时也被解析
+- `InputStream getResourceAsStream(String name)`：指定资源名称获取输入流
+
+------
+
+
+
+#### 加载模型
+
+##### 加载机制
+
+在 JVM 中，对于类加载模型提供了三种，分别为**全盘加载**、**双亲委派**、**缓存机制**。
+
+- **全盘加载：**当一个类加载器负责加载某个 Class 时，该 Class 所**依赖和引用**的其他 Class 也将由该类加载器负责载入，除非显示指定使用另外一个类加载器来载入；
+- **双亲委派：**某个特定的类加载器在接到加载类的请求时，首先将加载任务委托给父加载器，**依次递归**，如果父加载器可以完成类加载任务，就成功返回；只有当父加载器无法完成此加载任务时，才自己去加载；
+- **缓存机制：**会保证所有加载过的 Class 都会被缓存，当程序中需要使用某个 Class 时，类加载器先从缓存区中搜寻该 Class，只有当缓存区中不存在该 Class 对象时，系统才会读取该类对应的二进制数据，并将其转换成 Class 对象存入缓冲区（方法区）中。
+  - 这就是修改了 Class 后，必须重新启动 JVM，程序所做的修改才会生效的原因。
+
+
+------
+
+
+
+##### 双亲委派
+
+双亲委派模型（Parents Delegation Model）：该模型要求除了顶层的启动类加载器外，其它类加载器都要有父类加载器，这里的父子关系一般通过**组合关系**（Composition）来实现，而不是继承关系（Inheritance）。
+
+工作过程：如果一个类加载器收到了类加载请求，它首先不会自己去尝试加载这个类，而是把这个请求委派给父类加载器去完成，只有当父加载器无法完成这个加载请求时，子加载器才会尝试自己去完成加载。
+
+双亲委派机制的优点：Java中的类随着它的类加载器一起具备了一种带有优先级的层次关系，可以避免某一个类被重复加载，当父类已经加载后则无需重复加载，保证全局唯一性。
+
+例如：在工程中新建 java.lang 包，接着在该包下新建 String 类，并定义 main 函数
+
+```java
+public class String {
+    public static void main(String[] args) {
+        System.out.println("demo info");
+    }
+}
+```
+
+此时执行 main 函数会出现异常，在类 java.lang.String 中找不到 main 方法。因为双亲委派的机制，java.lang.String 的在启动类加载器（Bootstrap）得到加载，启动类加载器优先级更高，在核心 jre 库中有其相同名字的类文件，但该类中并没有 main 方法。
+
+双亲委派机制的缺点：检查类是否加载的委托过程是单向的，这个方式虽然从结构上看比较清晰，使各个 ClassLoader 的职责非常明确，但**顶层的 ClassLoader 无法访问底层的 ClassLoader 所加载的类**（可见性）。
+
+<img src="https://foruda.gitee.com/images/1680776931151593718/18d5c635_8616658.png" style="zoom: 50%;" />
+
+
+
+------
+
+
+
+##### 源码分析
+
+```java
+protected Class<?> loadClass(String name, boolean resolve)
+    throws ClassNotFoundException {
+    synchronized (getClassLoadingLock(name)) {
+       // 1. 调用当前类加载器的 findLoadedClass(name)，检查当前类加载器是否已加载过指定 name 的类
+        Class c = findLoadedClass(name);
+        
+        // 2. 当前类加载器如果没有加载过
+        if (c == null) {
+            long t0 = System.nanoTime();
+            try {
+                // 3. 判断当前类加载器是否有父类加载器
+                if (parent != null) {
+                    // 4. 如果当前类加载器有父类加载器，则调用父类加载器的 loadClass(name,false)
+         			// 5. 父类加载器的 loadClass 方法，又会检查自己是否已经加载过
+                    c = parent.loadClass(name, false);
+                } else {
+                    // 当前类加载器没有父类加载器，说明当前类加载器是 BootStrapClassLoader
+          			// 则调用 BootStrap ClassLoader 的方法加载类
+                    c = findBootstrapClassOrNull(name);
+                }
+            } catch (ClassNotFoundException e) { }
+
+            if (c == null) {
+                // 如果调用父类的类加载器无法对类进行加载，则用自己的 findClass() 方法进行加载
+                // 可以自定义 findClass() 方法
+                long t1 = System.nanoTime();
+                c = findClass(name);
+
+                // this is the defining class loader; record the stats
+                sun.misc.PerfCounter.getParentDelegationTime().addTime(t1 - t0);
+                sun.misc.PerfCounter.getFindClassTime().addElapsedTimeFrom(t1);
+                sun.misc.PerfCounter.getFindClasses().increment();
+            }
+        }
+        if (resolve) {
+            // 链接指定的 Java 类，可以使类的 Class 对象创建完成的同时也被解析
+            resolveClass(c);
+        }
+        return c;
+    }
+}
+```
+
+
+
+------
+
+
+
+##### 破坏委派
+
+双亲委派模型并不是一个具有强制性约束的模型，而是 Java 设计者推荐给开发者的类加载器实现方式。
+
+破坏双亲委派模型的方式：
+
+- 自定义 ClassLoader
+
+  - 如果不想破坏双亲委派模型，只需要重写 `findClass` 方法；
+  - 如果想要去破坏双亲委派模型，需要去**重写 loadClass **方法。
+
+- 引入**线程上下文类加载器**
+
+  Java 提供了很多服务提供者接口（Service Provider Interface，SPI），允许第三方为这些接口提供实现。常见的有 JDBC、JCE、JNDI 等。这些 SPI 接口由 Java 核心库来提供，而 SPI 的实现代码则是作为 Java 应用所依赖的 jar 包被包含进类路径 classpath 里，SPI 接口中的代码需要加载具体的实现类：
+
+  - SPI 的接口是 Java 核心库的一部分，是由引导类加载器来加载的；
+  - SPI 的实现类是由系统类（程序类）加载器加载，引导类加载器是无法找到 SPI 的实现类，因为双亲委派模型中 BootstrapClassloader 无法委派 AppClassLoader 来加载类；
+
+  JDK 开发人员引入了线程上下文类加载器（Thread Context ClassLoader），这种类加载器可以通过 Thread  类的 setContextClassLoader 方法进行设置线程上下文类加载器，在执行线程中抛弃双亲委派加载模式，使程序可以逆向使用类加载器，使 Bootstrap 加载器拿到了 Application 加载器加载的类，破坏了双亲委派模型。
+
+- 实现程序的动态性，如代码热替换（Hot Swap）、模块热部署（Hot Deployment）。
+
+  IBM 公司主导的 JSR一291（OSGiR4.2）实现模块化热部署的关键是它自定义的类加载器机制的实现，每一个程序模块（OSGi 中称为 Bundle）都有一个自己的类加载器，当更换一个 Bundle 时，就把 Bundle 连同类加载器一起换掉以实现代码的热替换，在 OSGi 环境下，类加载器不再双亲委派模型推荐的树状结构，而是进一步发展为更加复杂的网状结构
+
+  当收到类加载请求时，OSGi 将按照下面的顺序进行类搜索:
+
+  1. 将以 java.* 开头的类，委派给父类加载器加载
+  2. 否则，将委派列表名单内的类，委派给父类加载器加载
+  3. 否则，将 Import 列表中的类，委派给 Export 这个类的 Bundle 的类加载器加载
+  4. 否则，查找当前 Bundle 的 ClassPath，使用自己的类加载器加载
+  5. 否则，查找类是否在自己的 Fragment Bundle 中，如果在就委派给 Fragment Bundle 类加载器加载
+  6. 否则，查找 Dynamic Import 列表的 Bundle，委派给对应 Bundle 的类加载器加载
+  7. 否则，类查找失败
+
+  热替换是指在程序的运行过程中，不停止服务，只通过替换程序文件来修改程序的行为，**热替换的关键需求在于服务不能中断**，修改必须立即表现正在运行的系统之中
+
+<img src="https://foruda.gitee.com/images/1680777486535354363/e9f4ffe9_8616658.png" style="zoom: 33%;" />
+
+
+
+------
+
+
+
+#### 沙箱机制
+
+沙箱机制（Sandbox）：将 Java 代码限定在虚拟机特定的运行范围中，并且严格限制代码对本地系统资源访问，来保证对代码的有效隔离，防止对本地系统造成破坏
+
+沙箱**限制系统资源访问**，包括 CPU、内存、文件系统、网络，不同级别的沙箱对资源访问的限制也不一样
+
+- JDK1.0：Java 中将执行程序分成本地代码和远程代码两种，本地代码默认视为可信任的，而远程代码被看作是不受信的。对于授信的本地代码，可以访问一切本地资源，而对于非授信的远程代码不可以访问本地资源，其实依赖于沙箱机制。如此严格的安全机制也给程序的功能扩展带来障碍，比如当用户希望远程代码访问本地系统的文件时候，就无法实现
+- JDK1.1：针对安全机制做了改进，增加了安全策略。允许用户指定代码对本地资源的访问权限
+- JDK1.2：改进了安全机制，增加了代码签名，不论本地代码或是远程代码都会按照用户的安全策略设定，由类加载器加载到虚拟机中权限不同的运行空间，来实现差异化的代码执行权限控制
+- JDK1.6：当前最新的安全机制，引入了域（Domain）的概念。虚拟机会把所有代码加载到不同的系统域和应用域，不同的保护域对应不一样的权限。系统域部分专门负责与关键资源进行交互，而各个应用域部分则通过系统域的部分代理来对各种需要的资源进行访问
+
+<img src="https://foruda.gitee.com/images/1680779146000794457/d28231a4_8616658.png" style="zoom:67%;" />
+
+
+
+------
+
+
+
+#### 自定义
+
+对于自定义类加载器的实现，只需要继承 ClassLoader 类，覆写 findClass 方法即可
+
+作用：隔离加载类、修改类加载的方式、拓展加载源、防止源码泄漏
+
+```java
+//自定义类加载器，读取指定的类路径classPath下的class文件
+public class MyClassLoader extends ClassLoader{
+    private String classPath;
+
+    public MyClassLoader(String classPath) {
+        this.classPath = classPath;
+    }
+    
+     public MyClassLoader(ClassLoader parent, String byteCodePath) {
+        super(parent);
+        this.classPath = classPath;
+    }
+
+    @Override
+    protected Class<?> findClass(String name) throws ClassNotFoundException {
+       BufferedInputStream bis = null;
+        ByteArrayOutputStream baos = null;
+        try {
+            // 获取字节码文件的完整路径
+            String fileName = classPath + className + ".class";
+            // 获取一个输入流
+            bis = new BufferedInputStream(new FileInputStream(fileName));
+            // 获取一个输出流
+            baos = new ByteArrayOutputStream();
+            // 具体读入数据并写出的过程
+            int len;
+            byte[] data = new byte[1024];
+            while ((len = bis.read(data)) != -1) {
+                baos.write(data, 0, len);
+            }
+            // 获取内存中的完整的字节数组的数据
+            byte[] byteCodes = baos.toByteArray();
+            // 调用 defineClass()，将字节数组的数据转换为 Class 的实例。
+            Class clazz = defineClass(null, byteCodes, 0, byteCodes.length);
+            return clazz;
+        } catch (IOException e) {
+            e.printStackTrace();
+        } finally {
+            try {
+                if (baos != null)
+                    baos.close();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+            try {
+                if (bis != null)
+                    bis.close();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+        return null;
+    }
+}
+```
+
+```java
+public static void main(String[] args) {
+    MyClassLoader loader = new MyClassLoader("D:\Workspace\Project\JVM_study\src\java1\");
+
+    try {
+        Class clazz = loader.loadClass("Demo1");
+        System.out.println("加载此类的类的加载器为：" + clazz.getClassLoader().getClass().getName());//MyClassLoader
+
+        System.out.println("加载当前类的类的加载器的父类加载器为：" + clazz.getClassLoader().getParent().getClass().getName());//sun.misc.Launcher$AppClassLoader
+    } catch (ClassNotFoundException e) {
+        e.printStackTrace();
+    }
+}
+```
+
+
+
+------
+
+
+
+#### JDK9
+
+为了保证兼容性，JDK9 没有改变三层类加载器架构和双亲委派模型，但为了模块化系统的顺利运行做了一些变动：
+
+- 扩展机制被移除，扩展类加载器由于**向后兼容性**的原因被保留，不过被重命名为平台类加载器（platform classloader），可以通过 ClassLoader 的新方法 getPlatformClassLoader() 来获取
+- JDK9 基于模块化进行构建（原来的 rt.jar 和 tools.jar 被拆分成数个 JMOD 文件），其中 Java 类库就满足了可扩展的需求，那就无须再保留 `<JAVA_HOME>\lib\ext` 目录，此前使用这个目录或者 `java.ext.dirs` 系统变量来扩展 JDK 功能的机制就不需要再存在
+- 启动类加载器、平台类加载器、应用程序类加载器全都继承于 `jdk.internal.loader.BuiltinClassLoader`
+
+
+***
+
+## 虚拟机字节码执行引擎
+
+### 基本介绍
+
+虚拟机是一个相对于物理机的概念，这两种机器都有代码执行能力，物理机的执行引擎是直接建立在处理器、缓存、指令集和操作系统层面上，虚拟机的执行引擎是由软件自行实现的，可以不受物理条件制约地定制指令集与执行引擎的结构体系。
+
+执行引擎：Java 虚拟机的核心组成部分之一，类加载主要任务是负责装载字节码到其内部，但字节码并不能够直接运行在操作系统之上，需要执行引擎将**字节码指令解释/编译为对应平台上的本地机器指令**，进行执行。
+
+Java 是**半编译半解释型语言**，将解释执行与编译执行二者结合起来进行：
+
+- 解释器：根据预定义的规范对字节码采用逐行解释的方式执行，将每条字节码文件中的内容翻译为对应平台的本地机器指令执行
+- 即时编译器（JIT : Just In Time Compiler）：虚拟机运行时将源代码直接编译成**和本地机器平台相关的机器码**后再执行，并存入 Code Cache，下次遇到相同的代码直接执行，效率高
+
+------
+
+### 运行时栈帧结构
+
+Java虚拟机以方法作为最基本执行单元，栈帧（Stack Frame）则是用于支持虚拟机进行方法调用和方法执行背后的数据结构，它也是虚拟机运行时数据区中的虚拟机栈（Virtual Machine Stack）的栈元素。栈帧存储了方法的局部变量表、操作数栈、动态连接和方法返回地址等信息。
+
+#### 执行方式
+
+HotSpot VM 采用**解释器与即时编译器并存的架构**，解释器和即时编译器能够相互协作，去选择最合适的方式来权衡编译本地代码和直接解释执行代码的时间
+
+HostSpot JVM 的默认执行方式：
+
+- 当程序启动后，解释器可以马上发挥作用立即执行，省去编译器编译的时间（解释器存在的**必要性**）
+- 随着程序运行时间的推移，即时编译器逐渐发挥作用，根据热点探测功能，将有价值的字节码编译为本地机器指令，以换取更高的程序执行效率
+
+HotSpot VM 可以通过 VM 参数设置程序执行方式：
+
+- -Xint：完全采用解释器模式执行程序
+- -Xcomp：完全采用即时编译器模式执行程序。如果即时编译出现问题，解释器会介入执行
+- -Xmixed：采用解释器 + 即时编译器的混合模式共同执行程序
+
+![](https://seazean.oss-cn-beijing.aliyuncs.com/img/Java/JVM-执行引擎工作流程.png)
+
+
+
+------
+
+
+
+#### 热点探测
+
+热点代码：被 JIT 编译器编译的字节码，根据代码被调用执行的频率而定，一个被多次调用的方法或者一个循环次数较多的循环体都可以被称之为热点代码
+
+热点探测：JIT 编译器在运行时会针热点代码做出深度优化，将其直接编译为对应平台的本地机器指令进行缓存，以提升程序执行性能
+
+JIT 编译在默认情况是异步进行的，当触发某方法或某代码块的优化时，先将其放入编译队列，然后由编译线程进行编译，编译之后的代码放在 CodeCache 中，通过 `-XX:-BackgroundCompilation` 参数可以关闭异步编译
+
+- **CodeCache** 用于缓存编译后的机器码、动态生成的代码和本地方法代码 JNI
+- 如果 CodeCache 区域被占满，编译器被停用，字节码将不会编译为机器码，应用程序继续运行，但运行性能会降低很多
+
+HotSpot VM 采用的热点探测方式是基于计数器的热点探测，为每一个方法都建立 2 个不同类型的计数器：方法调用计数器（Invocation Counter）和回边计数器（BackEdge Counter）
+
+- 方法调用计数器：用于统计方法被调用的次数，默认阈值在 Client 模式 下是 1500 次，在 Server 模式下是 10000 次（需要进行激进的优化），超过这个阈值，就会触发 JIT 编译，阈值可以通过虚拟机参数 `-XX:CompileThreshold` 设置
+
+  工作流程：当一个方法被调用时， 会先检查该方法是否存在被 JIT 编译过的版本，存在则使用编译后的本地代码来执行；如果不存在则将此方法的调用计数器值加 1，然后判断方法调用计数器与回边计数器值之和是否超过方法调用计数器的阈值，如果超过阈值会向即时编译器**提交一个该方法的代码编译请求**
+
+- 回边计数器：统计一个方法中循环体代码执行的次数，在字节码中控制流向后跳转的指令称为回边
+
+  如果一个方法中的循环体需要执行多次，可以优化为为栈上替换，简称 OSR (On StackReplacement) 编译，**OSR 替换循环代码体的入口，C1、C2 替换的是方法调用的入口**，OSR 编译后会出现方法的整段代码被编译了，但是只有循环体部分才执行编译后的机器码，其他部分仍是解释执行
+
+------
+
+
+
+#### 分层编译
+
+HotSpot VM 内嵌两个 JIT 编译器，分别为 Client Compiler 和 Server Compiler，简称 C1 编译器和 C2 编译器
+
+C1 编译器会对字节码进行简单可靠的优化，耗时短，以达到更快的编译速度，C1 编译器的优化方法：
+
+- 方法内联：**将调用的函数代码编译到调用点处**，这样可以减少栈帧的生成，减少参数传递以及跳转过程
+
+  方法内联能够消除方法调用的固定开销，任何方法除非被内联，否则调用都会有固定开销，来源于保存程序在该方法中的执行位置，以及新建、压入和弹出新方法所使用的栈帧。
+
+  ```java
+  private static int square(final int i) {
+  	return i * i;
+  }
+  System.out.println(square(9));
+  ```
+
+  square 是热点方法，会进行内联，把方法内代码拷贝粘贴到调用者的位置：
+
+  ```java
+  System.out.println(9 * 9);
+  ```
+
+  还能够进行常量折叠（constant folding）的优化：
+
+  ```java
+  System.out.println(81);
+  ```
+
+- 冗余消除：根据运行时状况进行代码折叠或削除
+
+- 内联缓存：是一种加快动态绑定的优化技术（方法调用部分详解）
+
+C2 编译器进行耗时较长的优化以及激进优化，优化的代码执行效率更高，当激进优化的假设不成立时，再退回使用 C1 编译，这也是使用分层编译的原因
+
+C2 的优化主要是在全局层面，逃逸分析是优化的基础：标量替换、栈上分配、同步消除
+
+VM 参数设置：
+
+- -client：指定 Java 虚拟机运行在 Client 模式下，并使用 C1 编译器
+- -server：指定 Java 虚拟机运行在 Server 模式下，并使用 C2 编译器
+- `-server -XX:+TieredCompilation`：在 1.8 之前，分层编译默认是关闭的，可以添加该参数开启
+
+分层编译策略 (Tiered Compilation)：程序解释执行可以触发 C1 编译，将字节码编译成机器码，加上性能监控，C2 编译会根据性能监控信息进行激进优化，JVM 将执行状态分成了 5 个层次：
+
+- 0 层，解释执行（Interpreter）
+
+- 1 层，使用 C1 即时编译器编译执行（不带 profiling）
+
+- 2 层，使用 C1 即时编译器编译执行（带基本的 profiling）
+
+- 3 层，使用 C1 即时编译器编译执行（带完全的 profiling）
+
+- 4 层，使用 C2 即时编译器编译执行（C1 和 C2 协作运行）
+
+  说明：profiling 是指在运行过程中收集一些程序执行状态的数据，例如方法的调用次数，循环的回边次数等
+
+参考文章：https://www.jianshu.com/p/20bd2e9b1f03
+
+
+
+------
+
+
+
+### 方法调用
+
+方法调用并不等于方法执行，方法调用阶段唯一的任务就是**确定被调用方法的版本**，不是方法的具体运行过程。
+
+#### 方法识别
+
+Java 虚拟机识别方法的关键在于类名、方法名以及方法描述符（method descriptor）。
+
+- **方法描述符是由方法的参数类型以及返回类型所构成**，Java 层面叫方法特征签名；
+- 在同一个类中，如果同时出现多个名字相同且描述符也相同的方法，那么 Java 虚拟机会在类的验证阶段报错；
+
+JVM 根据名字和描述符来判断的，只要返回值不一样（方法描述符不一样），其它完全一样，在 JVM 中是允许的，但 Java 语言不允许。
+
+```java
+// 返回值类型不同，编译阶段直接报错
+public static Integer invoke(Object... args) {
+    return 1;
+}
+public static int invoke(Object... args) {
+    return 2;
+}
+```
+
+
+
+------
+
+
+
+#### 调用机制
+
+在 JVM 中，将符号引用转换为直接引用有两种机制：
+
+- 静态链接：当一个字节码文件被装载进 JVM 内部时，如果被调用的目标方法在编译期可知，且运行期保持不变，将调用方法的符号引用转换为直接引用的过程称之为静态链接（类加载的解析阶段）
+- 动态链接：被调用的方法在编译期无法被确定下来，只能在程序运行期将调用方法的符号引用转换为直接引用，由于这种引用转换过程具备动态性，因此被称为动态链接（初始化后的解析阶段）
+
+
+- 对应方法的绑定（分配）机制：静态绑定和动态绑定，编译器已经区分了重载的方法（静态绑定和动态绑定），因此可以认为虚拟机中不存在重载
+
+非虚方法：
+
+- 非虚方法在编译期就确定了具体的调用版本，这个版本在运行时是不可变的
+- 静态方法、私有方法、final 方法、实例构造器、父类方法都是非虚方法
+- 所有普通成员方法、实例方法、被重写的方法都是虚方法
+
+动态类型语言和静态类型语言：
+
+- 在于对类型的检查是在编译期还是在运行期，满足前者就是静态类型语言，反之则是动态类型语言
+
+- 静态语言是判断变量自身的类型信息；动态类型语言是判断变量值的类型信息，变量没有类型信息
+
+- **Java 是静态类型语言**（尽管 Lambda 表达式为其增加了动态特性），JS，Python 是动态类型语言
+
+  ```java
+  String s = "abc";   //Java
+  info = "abc";       //Python
+  ```
+
+------
+
+
+
+#### 调用指令
+
+##### 五种指令
+
+普通调用指令：
+
+- invokestatic：调用静态方法
+- invokespecial：调用私有方法、构造器，和父类的实例方法或构造器，以及所实现接口的默认方法
+- invokevirtual：调用所有虚方法（虚方法分派）
+- invokeinterface：调用接口方法
+
+动态调用指令：
+
+- invokedynamic：动态解析出需要调用的方法
+  - Java7 为了实现动态类型语言支持而引入了该指令，但是并没有提供直接生成 invokedynamic 指令的方法，需要借助 ASM 这种底层字节码工具来产生 invokedynamic 指令
+  - Java8 的 lambda 表达式的出现，invokedynamic 指令在 Java 中才有了直接生成方式
+
+指令对比：
+
+- 普通调用指令固化在虚拟机内部，方法的调用执行不可干预，根据方法的符号引用链接到具体的目标方法
+- 动态调用指令支持用户确定方法
+- invokestatic 和 invokespecial 指令调用的方法称为非虚方法，虚拟机能够直接识别具体的目标方法
+- invokevirtual 和 invokeinterface 指令调用的方法称为虚方法，虚拟机需要在执行过程中根据调用者的动态类型来确定目标方法
+
+指令说明：
+
+- 如果虚拟机能够确定目标方法有且仅有一个，比如说目标方法被标记为 final，那么可以不通过动态绑定，直接确定目标方法
+- 普通成员方法是由 invokevirtual 调用，属于**动态绑定**，即支持多态
+
+------
+
+
+
+##### 符号引用
+
+在编译过程中，虚拟机并不知道目标方法的具体内存地址，Java 编译器会暂时用符号引用来表示该目标方法，这一符号引用包括目标方法所在的类或接口的名字，以及目标方法的方法名和方法描述符
+
+符号引用存储在方法区常量池中，根据目标方法是否为接口方法，分为接口符号引用和非接口符号引用：
+
+```java
+Constant pool:
+...
+  #16 = InterfaceMethodref #27.#29	// 接口
+...
+  #22 = Methodref          #1.#33	// 非接口
+...
+```
+
+对于非接口符号引用，假定该符号引用所指向的类为 C，则 Java 虚拟机会按照如下步骤进行查找：
+
+1. 在 C 中查找符合名字及描述符的方法
+2. 如果没有找到，在 C 的父类中继续搜索，直至 Object 类
+3. 如果没有找到，在 C 所直接实现或间接实现的接口中搜索，这一步搜索得到的目标方法必须是非私有、非静态的。如果有多个符合条件的目标方法，则任意返回其中一个
+
+对于接口符号引用，假定该符号引用所指向的接口为 I，则 Java 虚拟机会按照如下步骤进行查找：
+
+1. 在 I 中查找符合名字及描述符的方法
+2. 如果没有找到，在 Object 类中的公有实例方法中搜索
+3. 如果没有找到，则在 I 的超接口中搜索，这一步的搜索结果的要求与非接口符号引用步骤 3 的要求一致
+
+------
+
+
+
+##### 执行流程
+
+```java
+public class Demo {
+    public Demo() { }
+    private void test1() { }
+    private final void test2() { }
+
+    public void test3() { }
+    public static void test4() { }
+
+    public static void main(String[] args) {
+        Demo3_9 d = new Demo3_9();
+        d.test1();
+        d.test2();
+        d.test3();
+        d.test4();
+        Demo.test4();
+    }
+}
+```
+
+几种不同的方法调用对应的字节码指令：
+
+```java
+0:  new             #2 // class cn/jvm/t3/bytecode/Demo
+3:  dup
+4:  invokespecial   #3 // Method "<init>":()V
+7:  astore_1
+8:  aload_1
+9:  invokespecial   #4 // Method test1:()V
+12: aload_1
+13: invokespecial   #5 // Method test2:()V
+16: aload_1
+17: invokevirtual   #6 // Method test3:()V
+20: aload_1
+21: pop
+22: invokestatic    #7 // Method test4:()V
+25: invokestatic    #7 // Method test4:()V
+28: return
+```
+
+- invokespecial 调用该对象的构造方法 <init>:()V 
+- invokevirtual 调用对象的成员方法
+- `d.test4()` 是通过**对象引用**调用一个静态方法，在调用 invokestatic 之前执行了 pop 指令，把对象引用从操作数栈弹掉
+  - 不建议使用 `对象.静态方法()` 的方式调用静态方法，多了 aload 和 pop 指令
+  - 成员方法与静态方法调用的区别是：执行方法前是否需要对象引用
+
+------
+
+
+
+#### 多态原理
+
+##### 执行原理
+
+Java 虚拟机中关于方法重写的判定基于方法描述符，如果子类定义了与父类中非私有、非静态方法同名的方法，只有当这两个方法的参数类型以及返回类型一致，Java 虚拟机才会判定为重写
+
+理解多态：
+
+- 多态有编译时多态和运行时多态，即静态绑定和动态绑定
+- 前者是通过方法重载实现，后者是通过重写实现（子类覆盖父类方法，虚方法表）
+- 虚方法：运行时动态绑定的方法，对比静态绑定的非虚方法调用来说，虚方法调用更加耗时
+
+方法重写的本质：
+
+1. 找到操作数栈的第一个元素**所执行的对象的实际类型**，记作 C
+2. 如果在类型 C 中找到与描述符和名称都相符的方法，则进行访问**权限校验**（私有的），如果通过则返回这个方法的直接引用，查找过程结束；如果不通过，则返回 java.lang.IllegalAccessError 异常
+3. 找不到，就会按照继承关系从下往上依次对 C 的各个父类进行第二步的搜索和验证过程
+4. 如果始终没有找到合适的方法，则抛出 java.lang.AbstractMethodError 异常
+
+------
+
+
+
+##### 虚方法表
+
+在虚拟机工作过程中会频繁使用到动态绑定，每次动态绑定的过程中都要重新在类的元数据中搜索合适目标，影响到执行效率。为了提高性能，JVM 采取了一种用**空间换取时间**的策略来实现动态绑定，在每个**类的方法区**建立一个虚方法表（virtual method table），实现使用索引表来代替查找，可以快速定位目标方法
+
+- invokevirtual 所使用的虚方法表（virtual method table，vtable），执行流程
+  1. 先通过栈帧中的对象引用找到对象，分析对象头，找到对象的实际 Class
+  2. Class 结构中有 vtable，查表得到方法的具体地址，执行方法的字节码
+- invokeinterface 所使用的接口方法表（interface method table，itable）
+
+虚方法表会在类加载的链接阶段被创建并开始初始化，类的变量初始值准备完成之后，JVM 会把该类的方法表也初始化完毕
+
+虚方法表的执行过程：
+
+- 对于静态绑定的方法调用而言，实际引用是一个指向方法的指针
+- 对于动态绑定的方法调用而言，实际引用是方法表的索引值，也就是方法的间接地址。Java 虚拟机获取调用者的实际类型，并在该实际类型的虚方法表中，根据索引值获得目标方法内存偏移量（指针）
+
+为了优化对象调用方法的速度，方法区的类型信息会增加一个指针，该指针指向一个记录该类方法的方法表。每个类中都有一个虚方法表，本质上是一个数组，每个数组元素指向一个当前类及其祖先类中非私有的实例方法
+
+方法表满足以下的特质：
+
+- 其一，子类方法表中包含父类方法表中的**所有方法**，并且在方法表中的索引值与父类方法表种的索引值相同
+- 其二，**非重写的方法指向父类的方法表项，与父类共享一个方法表项，重写的方法指向本身自己的实现**，这就是为什么多态情况下可以访问父类的方法。
+
+<img src="https://seazean.oss-cn-beijing.aliyuncs.com/img/Java/JVM-虚方法表.png" style="zoom: 80%;" />
+
+Passenger 类的方法表包括两个方法，分别对应 0 号和 1 号。方法表调换了 toString 方法和 passThroughImmigration 方法的位置，是因为 toString 方法的索引值需要与 Object 类中同名方法的索引值一致，为了保持简洁，这里不考虑 Object 类中的其他方法。
+
+虚方法表对性能的影响：
+
+- 使用了方法表的动态绑定与静态绑定相比，仅仅多出几个内存解引用操作：访问栈上的调用者、读取调用者的动态类型、读取该类型的方法表、读取方法表中某个索引值所对应的目标方法，但是相对于创建并初始化 Java 栈帧这操作的开销可以忽略不计
+- 上述优化的效果看上去不错，但实际上**仅存在于解释执行**中，或者即时编译代码的最坏情况。因为即时编译还拥有另外两种性能更好的优化手段：内联缓存（inlining cache）和方法内联（method inlining）
+
+```java
+class Person {
+    public String toString() {
+        return "I'm a person.";
+    }
+    public void eat() {}
+    public void speak() {}
+}
+
+class Boy extends Person {
+    public String toString() {
+        return "I'm a boy";
+    }
+    public void speak() {}
+    public void fight() {}
+}
+
+class Girl extends Person {
+    public String toString() {
+        return "I'm a girl";
+    }
+    public void speak() {}
+    public void sing() {}
+}
+```
+
+![](https://seazean.oss-cn-beijing.aliyuncs.com/img/Java/JVM-虚方法表指向.png)
+
+
+
+参考文档：https://www.cnblogs.com/kaleidoscope/p/9790766.html
+
+
+
+------
+
+
+
+##### 内联缓存
+
+内联缓存：是一种加快动态绑定的优化技术，能够缓存虚方法调用中**调用者的动态类型以及该类型所对应的目标方法**。在之后的执行过程中，如果碰到已缓存的类型，便会直接调用该类型所对应的目标方法；反之内联缓存则会退化至使用基于方法表的动态绑定
+
+多态的三个术语：
+
+- 单态 (monomorphic)：指的是仅有一种状态的情况
+- 多态 (polymorphic)：指的是有限数量种状态的情况，二态（bimorphic）是多态的其中一种
+- 超多态 (megamorphic)：指的是更多种状态的情况，通常用一个具体数值来区分多态和超多态，在这个数值之下，称之为多态，否则称之为超多态
+
+对于内联缓存来说，有对应的单态内联缓存、多态内联缓存：
+
+- 单态内联缓存：只缓存了一种动态类型以及所对应的目标方法，实现简单，比较所缓存的动态类型，如果命中，则直接调用对应的目标方法。
+- 多态内联缓存：缓存了多个动态类型及其目标方法，需要逐个将所缓存的动态类型与当前动态类型进行比较，如果命中，则调用对应的目标方法
+
+为了节省内存空间，**Java 虚拟机只采用单态内联缓存**，没有命中的处理方法：
+
+- 替换单态内联缓存中的纪录，类似于 CPU 中的数据缓存，对数据的局部性有要求，即在替换内联缓存之后的一段时间内，方法调用的调用者的动态类型应当保持一致，从而能够有效地利用内联缓存
+- 劣化为超多态状态，这也是 Java 虚拟机的具体实现方式，这种状态实际上放弃了优化的机会，将直接访问方法表来动态绑定目标方法，但是与替换内联缓存纪录相比节省了写缓存的额外开销
+
+虽然内联缓存附带内联二字，但是并没有内联目标方法
+
+
+
+参考文章：https://time.geekbang.org/column/intro/100010301
+
+***
+
+## 编译指令
+
+### javac
 
 javac：编译命令，将 java 源文件编译成 class 字节码文件
 
@@ -3353,7 +3679,7 @@ javac：编译命令，将 java 源文件编译成 class 字节码文件
 
 
 
-##### javap
+### javap
 
 javap 反编译生成的字节码文件，根据 class 字节码文件，反解析出当前类对应的 code 区 （字节码指令）、局部变量表、异常表和代码行偏移量映射表、常量池等信息
 
@@ -3385,7 +3711,7 @@ javap 反编译生成的字节码文件，根据 class 字节码文件，反解�
 
 
 
-#### 指令集  
+### 指令集  
 
 ##### 执行指令
 
@@ -3957,446 +4283,7 @@ javap -v Demo.class：省略
 
 
 
-### 执行引擎
 
-#### 基本介绍
-
-执行引擎：Java 虚拟机的核心组成部分之一，类加载主要任务是负责装载字节码到其内部，但字节码并不能够直接运行在操作系统之上，需要执行引擎将**字节码指令解释/编译为对应平台上的本地机器指令**，进行执行
-
-虚拟机是一个相对于物理机的概念，这两种机器都有代码执行能力：
-
-* 物理机的执行引擎是直接建立在处理器、缓存、指令集和操作系统层面上
-* 虚拟机的执行引擎是由软件自行实现的，可以不受物理条件制约地定制指令集与执行引擎的结构体系
-
-Java 是**半编译半解释型语言**，将解释执行与编译执行二者结合起来进行：
-
-* 解释器：根据预定义的规范对字节码采用逐行解释的方式执行，将每条字节码文件中的内容翻译为对应平台的本地机器指令执行
-* 即时编译器（JIT : Just In Time Compiler）：虚拟机运行时将源代码直接编译成**和本地机器平台相关的机器码**后再执行，并存入 Code Cache，下次遇到相同的代码直接执行，效率高
-
-
-***
-
-
-
-#### 执行方式
-
-HotSpot VM 采用**解释器与即时编译器并存的架构**，解释器和即时编译器能够相互协作，去选择最合适的方式来权衡编译本地代码和直接解释执行代码的时间
-
-HostSpot JVM 的默认执行方式：
-
-* 当程序启动后，解释器可以马上发挥作用立即执行，省去编译器编译的时间（解释器存在的**必要性**）
-* 随着程序运行时间的推移，即时编译器逐渐发挥作用，根据热点探测功能，将有价值的字节码编译为本地机器指令，以换取更高的程序执行效率
-
-HotSpot VM 可以通过 VM 参数设置程序执行方式：
-
-- -Xint：完全采用解释器模式执行程序
-- -Xcomp：完全采用即时编译器模式执行程序。如果即时编译出现问题，解释器会介入执行
-- -Xmixed：采用解释器 + 即时编译器的混合模式共同执行程序
-
-![](https://seazean.oss-cn-beijing.aliyuncs.com/img/Java/JVM-执行引擎工作流程.png)
-
-
-
-***
-
-
-
-#### 热点探测
-
-热点代码：被 JIT 编译器编译的字节码，根据代码被调用执行的频率而定，一个被多次调用的方法或者一个循环次数较多的循环体都可以被称之为热点代码
-
-热点探测：JIT 编译器在运行时会针热点代码做出深度优化，将其直接编译为对应平台的本地机器指令进行缓存，以提升程序执行性能
-
-JIT 编译在默认情况是异步进行的，当触发某方法或某代码块的优化时，先将其放入编译队列，然后由编译线程进行编译，编译之后的代码放在 CodeCache 中，通过 `-XX:-BackgroundCompilation` 参数可以关闭异步编译
-
-* **CodeCache** 用于缓存编译后的机器码、动态生成的代码和本地方法代码 JNI
-* 如果 CodeCache 区域被占满，编译器被停用，字节码将不会编译为机器码，应用程序继续运行，但运行性能会降低很多
-
-HotSpot VM 采用的热点探测方式是基于计数器的热点探测，为每一个方法都建立 2 个不同类型的计数器：方法调用计数器（Invocation Counter）和回边计数器（BackEdge Counter）
-
-* 方法调用计数器：用于统计方法被调用的次数，默认阈值在 Client 模式 下是 1500 次，在 Server 模式下是 10000 次（需要进行激进的优化），超过这个阈值，就会触发 JIT 编译，阈值可以通过虚拟机参数 `-XX:CompileThreshold` 设置
-
-  工作流程：当一个方法被调用时， 会先检查该方法是否存在被 JIT 编译过的版本，存在则使用编译后的本地代码来执行；如果不存在则将此方法的调用计数器值加 1，然后判断方法调用计数器与回边计数器值之和是否超过方法调用计数器的阈值，如果超过阈值会向即时编译器**提交一个该方法的代码编译请求**
-
-* 回边计数器：统计一个方法中循环体代码执行的次数，在字节码中控制流向后跳转的指令称为回边
-
-  如果一个方法中的循环体需要执行多次，可以优化为为栈上替换，简称 OSR (On StackReplacement) 编译，**OSR 替换循环代码体的入口，C1、C2 替换的是方法调用的入口**，OSR 编译后会出现方法的整段代码被编译了，但是只有循环体部分才执行编译后的机器码，其他部分仍是解释执行
-
-
-***
-
-
-
-#### 分层编译
-
-HotSpot VM 内嵌两个 JIT 编译器，分别为 Client Compiler 和 Server Compiler，简称 C1 编译器和 C2 编译器
-
-C1 编译器会对字节码进行简单可靠的优化，耗时短，以达到更快的编译速度，C1 编译器的优化方法：
-
-* 方法内联：**将调用的函数代码编译到调用点处**，这样可以减少栈帧的生成，减少参数传递以及跳转过程
-
-  方法内联能够消除方法调用的固定开销，任何方法除非被内联，否则调用都会有固定开销，来源于保存程序在该方法中的执行位置，以及新建、压入和弹出新方法所使用的栈帧。
-
-  ```java
-  private static int square(final int i) {
-  	return i * i;
-  }
-  System.out.println(square(9));
-  ```
-
-  square 是热点方法，会进行内联，把方法内代码拷贝粘贴到调用者的位置：
-
-  ```java
-  System.out.println(9 * 9);
-  ```
-
-  还能够进行常量折叠（constant folding）的优化：
-
-  ```java
-  System.out.println(81);
-  ```
-
-* 冗余消除：根据运行时状况进行代码折叠或削除
-
-* 内联缓存：是一种加快动态绑定的优化技术（方法调用部分详解）
-
-C2 编译器进行耗时较长的优化以及激进优化，优化的代码执行效率更高，当激进优化的假设不成立时，再退回使用 C1 编译，这也是使用分层编译的原因
-
-C2 的优化主要是在全局层面，逃逸分析是优化的基础：标量替换、栈上分配、同步消除
-
-VM 参数设置：
-
-- -client：指定 Java 虚拟机运行在 Client 模式下，并使用 C1 编译器
-- -server：指定 Java 虚拟机运行在 Server 模式下，并使用 C2 编译器
-- `-server -XX:+TieredCompilation`：在 1.8 之前，分层编译默认是关闭的，可以添加该参数开启
-
-分层编译策略 (Tiered Compilation)：程序解释执行可以触发 C1 编译，将字节码编译成机器码，加上性能监控，C2 编译会根据性能监控信息进行激进优化，JVM 将执行状态分成了 5 个层次：
-
-* 0 层，解释执行（Interpreter）
-
-* 1 层，使用 C1 即时编译器编译执行（不带 profiling）
-
-* 2 层，使用 C1 即时编译器编译执行（带基本的 profiling）
-
-* 3 层，使用 C1 即时编译器编译执行（带完全的 profiling）
-
-* 4 层，使用 C2 即时编译器编译执行（C1 和 C2 协作运行）
-
-  说明：profiling 是指在运行过程中收集一些程序执行状态的数据，例如方法的调用次数，循环的回边次数等
-
-
-
-参考文章：https://www.jianshu.com/p/20bd2e9b1f03
-
-
-
-***
-
-
-
-### 方法调用
-
-#### 方法识别
-
-Java 虚拟机识别方法的关键在于类名、方法名以及方法描述符（method descriptor）
-
-* **方法描述符是由方法的参数类型以及返回类型所构成**，Java 层面叫方法特征签名
-* 在同一个类中，如果同时出现多个名字相同且描述符也相同的方法，那么 Java 虚拟机会在类的验证阶段报错
-
-JVM 根据名字和描述符来判断的，只要返回值不一样（方法描述符不一样），其它完全一样，在 JVM 中是允许的，但 Java 语言不允许
-
-```java
-// 返回值类型不同，编译阶段直接报错
-public static Integer invoke(Object... args) {
-    return 1;
-}
-public static int invoke(Object... args) {
-    return 2;
-}
-```
-
-
-
-***
-
-
-
-#### 调用机制
-
-方法调用并不等于方法执行，方法调用阶段唯一的任务就是**确定被调用方法的版本**，不是方法的具体运行过程
-
-在 JVM 中，将符号引用转换为直接引用有两种机制：
-
-- 静态链接：当一个字节码文件被装载进 JVM 内部时，如果被调用的目标方法在编译期可知，且运行期保持不变，将调用方法的符号引用转换为直接引用的过程称之为静态链接（类加载的解析阶段）
-- 动态链接：被调用的方法在编译期无法被确定下来，只能在程序运行期将调用方法的符号引用转换为直接引用，由于这种引用转换过程具备动态性，因此被称为动态链接（初始化后的解析阶段）
-
-* 对应方法的绑定（分配）机制：静态绑定和动态绑定，编译器已经区分了重载的方法（静态绑定和动态绑定），因此可以认为虚拟机中不存在重载
-
-非虚方法：
-
-- 非虚方法在编译期就确定了具体的调用版本，这个版本在运行时是不可变的
-- 静态方法、私有方法、final 方法、实例构造器、父类方法都是非虚方法
-- 所有普通成员方法、实例方法、被重写的方法都是虚方法
-
-动态类型语言和静态类型语言：
-
-- 在于对类型的检查是在编译期还是在运行期，满足前者就是静态类型语言，反之则是动态类型语言
-
-- 静态语言是判断变量自身的类型信息；动态类型语言是判断变量值的类型信息，变量没有类型信息
-
-- **Java 是静态类型语言**（尽管 Lambda 表达式为其增加了动态特性），JS，Python 是动态类型语言
-
-  ```java
-  String s = "abc";   //Java
-  info = "abc";       //Python
-  ```
-
-
-***
-
-
-
-#### 调用指令
-
-##### 五种指令
-
-普通调用指令：
-
-- invokestatic：调用静态方法
-- invokespecial：调用私有方法、构造器，和父类的实例方法或构造器，以及所实现接口的默认方法
-- invokevirtual：调用所有虚方法（虚方法分派）
-- invokeinterface：调用接口方法
-
-动态调用指令：
-
-- invokedynamic：动态解析出需要调用的方法
-  - Java7 为了实现动态类型语言支持而引入了该指令，但是并没有提供直接生成 invokedynamic 指令的方法，需要借助 ASM 这种底层字节码工具来产生 invokedynamic 指令
-  - Java8 的 lambda 表达式的出现，invokedynamic 指令在 Java 中才有了直接生成方式
-
-指令对比：
-
-- 普通调用指令固化在虚拟机内部，方法的调用执行不可干预，根据方法的符号引用链接到具体的目标方法
-- 动态调用指令支持用户确定方法
-- invokestatic 和 invokespecial 指令调用的方法称为非虚方法，虚拟机能够直接识别具体的目标方法
-- invokevirtual 和 invokeinterface 指令调用的方法称为虚方法，虚拟机需要在执行过程中根据调用者的动态类型来确定目标方法
-
-指令说明：
-
-- 如果虚拟机能够确定目标方法有且仅有一个，比如说目标方法被标记为 final，那么可以不通过动态绑定，直接确定目标方法
-- 普通成员方法是由 invokevirtual 调用，属于**动态绑定**，即支持多态
-
-
-***
-
-
-
-##### 符号引用
-
-在编译过程中，虚拟机并不知道目标方法的具体内存地址，Java 编译器会暂时用符号引用来表示该目标方法，这一符号引用包括目标方法所在的类或接口的名字，以及目标方法的方法名和方法描述符
-
-符号引用存储在方法区常量池中，根据目标方法是否为接口方法，分为接口符号引用和非接口符号引用：
-
-```java
-Constant pool:
-...
-  #16 = InterfaceMethodref #27.#29	// 接口
-...
-  #22 = Methodref          #1.#33	// 非接口
-...
-```
-
-对于非接口符号引用，假定该符号引用所指向的类为 C，则 Java 虚拟机会按照如下步骤进行查找：
-
-1. 在 C 中查找符合名字及描述符的方法
-2. 如果没有找到，在 C 的父类中继续搜索，直至 Object 类
-3. 如果没有找到，在 C 所直接实现或间接实现的接口中搜索，这一步搜索得到的目标方法必须是非私有、非静态的。如果有多个符合条件的目标方法，则任意返回其中一个
-
-对于接口符号引用，假定该符号引用所指向的接口为 I，则 Java 虚拟机会按照如下步骤进行查找：
-
-1. 在 I 中查找符合名字及描述符的方法
-2. 如果没有找到，在 Object 类中的公有实例方法中搜索
-3. 如果没有找到，则在 I 的超接口中搜索，这一步的搜索结果的要求与非接口符号引用步骤 3 的要求一致
-
-
-***
-
-
-
-##### 执行流程
-
-```java
-public class Demo {
-    public Demo() { }
-    private void test1() { }
-    private final void test2() { }
-
-    public void test3() { }
-    public static void test4() { }
-
-    public static void main(String[] args) {
-        Demo3_9 d = new Demo3_9();
-        d.test1();
-        d.test2();
-        d.test3();
-        d.test4();
-        Demo.test4();
-    }
-}
-```
-
-几种不同的方法调用对应的字节码指令：
-
-```java
-0:  new             #2 // class cn/jvm/t3/bytecode/Demo
-3:  dup
-4:  invokespecial   #3 // Method "<init>":()V
-7:  astore_1
-8:  aload_1
-9:  invokespecial   #4 // Method test1:()V
-12: aload_1
-13: invokespecial   #5 // Method test2:()V
-16: aload_1
-17: invokevirtual   #6 // Method test3:()V
-20: aload_1
-21: pop
-22: invokestatic    #7 // Method test4:()V
-25: invokestatic    #7 // Method test4:()V
-28: return
-```
-
-- invokespecial 调用该对象的构造方法 <init>:()V 
-- invokevirtual 调用对象的成员方法
-- `d.test4()` 是通过**对象引用**调用一个静态方法，在调用 invokestatic 之前执行了 pop 指令，把对象引用从操作数栈弹掉
-  - 不建议使用 `对象.静态方法()` 的方式调用静态方法，多了 aload 和 pop 指令
-  - 成员方法与静态方法调用的区别是：执行方法前是否需要对象引用
-
-
-***
-
-
-
-#### 多态原理
-
-##### 执行原理
-
-Java 虚拟机中关于方法重写的判定基于方法描述符，如果子类定义了与父类中非私有、非静态方法同名的方法，只有当这两个方法的参数类型以及返回类型一致，Java 虚拟机才会判定为重写
-
-理解多态：
-
-- 多态有编译时多态和运行时多态，即静态绑定和动态绑定
-- 前者是通过方法重载实现，后者是通过重写实现（子类覆盖父类方法，虚方法表）
-- 虚方法：运行时动态绑定的方法，对比静态绑定的非虚方法调用来说，虚方法调用更加耗时
-
-方法重写的本质：
-
-1. 找到操作数栈的第一个元素**所执行的对象的实际类型**，记作 C
-
-2. 如果在类型 C 中找到与描述符和名称都相符的方法，则进行访问**权限校验**（私有的），如果通过则返回这个方法的直接引用，查找过程结束；如果不通过，则返回 java.lang.IllegalAccessError 异常
-
-3. 找不到，就会按照继承关系从下往上依次对 C 的各个父类进行第二步的搜索和验证过程
-
-4. 如果始终没有找到合适的方法，则抛出 java.lang.AbstractMethodError 异常
-
-
-***
-
-
-
-##### 虚方法表
-
-在虚拟机工作过程中会频繁使用到动态绑定，每次动态绑定的过程中都要重新在类的元数据中搜索合适目标，影响到执行效率。为了提高性能，JVM 采取了一种用**空间换取时间**的策略来实现动态绑定，在每个**类的方法区**建立一个虚方法表（virtual method table），实现使用索引表来代替查找，可以快速定位目标方法
-
-* invokevirtual 所使用的虚方法表（virtual method table，vtable），执行流程
-  1. 先通过栈帧中的对象引用找到对象，分析对象头，找到对象的实际 Class
-  2. Class 结构中有 vtable，查表得到方法的具体地址，执行方法的字节码
-* invokeinterface 所使用的接口方法表（interface method table，itable）
-
-虚方法表会在类加载的链接阶段被创建并开始初始化，类的变量初始值准备完成之后，JVM 会把该类的方法表也初始化完毕
-
-虚方法表的执行过程：
-
-* 对于静态绑定的方法调用而言，实际引用是一个指向方法的指针
-* 对于动态绑定的方法调用而言，实际引用是方法表的索引值，也就是方法的间接地址。Java 虚拟机获取调用者的实际类型，并在该实际类型的虚方法表中，根据索引值获得目标方法内存偏移量（指针）
-
-为了优化对象调用方法的速度，方法区的类型信息会增加一个指针，该指针指向一个记录该类方法的方法表。每个类中都有一个虚方法表，本质上是一个数组，每个数组元素指向一个当前类及其祖先类中非私有的实例方法
-
-方法表满足以下的特质：
-
-* 其一，子类方法表中包含父类方法表中的**所有方法**，并且在方法表中的索引值与父类方法表种的索引值相同
-* 其二，**非重写的方法指向父类的方法表项，与父类共享一个方法表项，重写的方法指向本身自己的实现**，这就是为什么多态情况下可以访问父类的方法。
-
-<img src="https://seazean.oss-cn-beijing.aliyuncs.com/img/Java/JVM-虚方法表.png" style="zoom: 80%;" />
-
-Passenger 类的方法表包括两个方法，分别对应 0 号和 1 号。方法表调换了 toString 方法和 passThroughImmigration 方法的位置，是因为 toString 方法的索引值需要与 Object 类中同名方法的索引值一致，为了保持简洁，这里不考虑 Object 类中的其他方法。
-
-虚方法表对性能的影响：
-
-* 使用了方法表的动态绑定与静态绑定相比，仅仅多出几个内存解引用操作：访问栈上的调用者、读取调用者的动态类型、读取该类型的方法表、读取方法表中某个索引值所对应的目标方法，但是相对于创建并初始化 Java 栈帧这操作的开销可以忽略不计
-* 上述优化的效果看上去不错，但实际上**仅存在于解释执行**中，或者即时编译代码的最坏情况。因为即时编译还拥有另外两种性能更好的优化手段：内联缓存（inlining cache）和方法内联（method inlining）
-
-```java
-class Person {
-    public String toString() {
-        return "I'm a person.";
-    }
-    public void eat() {}
-    public void speak() {}
-}
-
-class Boy extends Person {
-    public String toString() {
-        return "I'm a boy";
-    }
-    public void speak() {}
-    public void fight() {}
-}
-
-class Girl extends Person {
-    public String toString() {
-        return "I'm a girl";
-    }
-    public void speak() {}
-    public void sing() {}
-}
-```
-
-![](https://seazean.oss-cn-beijing.aliyuncs.com/img/Java/JVM-虚方法表指向.png)
-
-
-
-参考文档：https://www.cnblogs.com/kaleidoscope/p/9790766.html
-
-
-
-***
-
-
-
-##### 内联缓存
-
-内联缓存：是一种加快动态绑定的优化技术，能够缓存虚方法调用中**调用者的动态类型以及该类型所对应的目标方法**。在之后的执行过程中，如果碰到已缓存的类型，便会直接调用该类型所对应的目标方法；反之内联缓存则会退化至使用基于方法表的动态绑定
-
-多态的三个术语：
-
-* 单态 (monomorphic)：指的是仅有一种状态的情况
-* 多态 (polymorphic)：指的是有限数量种状态的情况，二态（bimorphic）是多态的其中一种
-* 超多态 (megamorphic)：指的是更多种状态的情况，通常用一个具体数值来区分多态和超多态，在这个数值之下，称之为多态，否则称之为超多态
-
-对于内联缓存来说，有对应的单态内联缓存、多态内联缓存：
-
-* 单态内联缓存：只缓存了一种动态类型以及所对应的目标方法，实现简单，比较所缓存的动态类型，如果命中，则直接调用对应的目标方法。
-* 多态内联缓存：缓存了多个动态类型及其目标方法，需要逐个将所缓存的动态类型与当前动态类型进行比较，如果命中，则调用对应的目标方法
-
-为了节省内存空间，**Java 虚拟机只采用单态内联缓存**，没有命中的处理方法：
-
-* 替换单态内联缓存中的纪录，类似于 CPU 中的数据缓存，对数据的局部性有要求，即在替换内联缓存之后的一段时间内，方法调用的调用者的动态类型应当保持一致，从而能够有效地利用内联缓存
-* 劣化为超多态状态，这也是 Java 虚拟机的具体实现方式，这种状态实际上放弃了优化的机会，将直接访问方法表来动态绑定目标方法，但是与替换内联缓存纪录相比节省了写缓存的额外开销
-
-虽然内联缓存附带内联二字，但是并没有内联目标方法
-
-
-
-参考文章：https://time.geekbang.org/column/intro/100010301
 
 
 
