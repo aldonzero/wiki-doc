@@ -313,7 +313,7 @@ SkipList（跳表）首先是链表，但与传统链表相比有几点差异：
 
 Dict由三部分组成，分别是：哈希表（DictHashTable）、哈希节点（DictEntry）、字典（Dict）
 
-向Dict添加键值对时，Redis首先根据key计算出hash值（h），然后利用 h & sizemask来计算元素应该存储到数组中的哪个索引位置。我们存储k1=v1，假设k1的哈希值h =1，则1&3 =1，因此k1=v1要存储到数组角标1位置。
+向Dict添加键值对时，Redis首先根据key计算出hash值（h），然后利用 `h & sizemask`来计算元素应该存储到数组中的哪个索引位置。我们存储k1=v1，假设k1的哈希值h =1，则1&3 =1，因此k1=v1要存储到数组角标1位置。
 
 <img src="https://foruda.gitee.com/images/1686364322309779106/4afc1111_8616658.png" style="zoom: 67%;" />
 
@@ -321,8 +321,7 @@ Dict由三部分组成，分别是：哈希表（DictHashTable）、哈希节点
 
 **Dict的扩容**
 
-Dict中的HashTable就是数组结合单向链表的实现，当集合中元素较多时，必然导致哈希冲突增多，链表过长，则查询效率会大大降低。
-Dict在每次新增键值对时都会检查负载因子（LoadFactor = used/size） ，满足以下两种情况时会触发哈希表扩容：
+Dict中的HashTable就是数组结合单向链表的实现，当集合中元素较多时，必然导致哈希冲突增多，链表过长，则查询效率会大大降低。Dict在每次新增键值对时都会检查负载因子（LoadFactor = used/size） ，满足以下两种情况时会触发哈希表扩容：
 
 - 哈希表的 LoadFactor >= 1，并且服务器没有执行 BGSAVE 或者 BGREWRITEAOF 等后台进程；
 - 哈希表的 LoadFactor > 5 ；
@@ -2040,21 +2039,6 @@ Redis 事务就是将多个命令请求打包，然后**一次性、按顺序**�
 
 * 命令入队：事务队列以先进先出（FIFO）的方式保存入队的命令，每个 Redis 客户端都有事务状态，包含着事务队列：
 
-  ```c
-  typedef struct redisClient {
-  	// 事务状态
-      multiState mstate;	/* MULTI/EXEC state */ 
-  }
-
-  typedef struct multiState {
-      // 事务队列，FIFO顺序
-      multiCmd *commands; 
-      
-     	// 已入队命令计数
-      int count；
-  }
-  ```
-
   * 如果命令为 EXEC、DISCARD、WATCH、MULTI 四个命中的一个，那么服务器立即执行这个命令
   * 其他命令服务器不执行，而是将命令放入一个事务队列里面，然后向客户端返回 QUEUED 回复
 
@@ -2072,7 +2056,7 @@ Redis 事务就是将多个命令请求打包，然后**一次性、按顺序**�
   DISCARD	# 终止当前事务的定义，发生在multi之后，exec之前
   ```
 
-  一般用于事务执行过程中输入了错误的指令，直接取消这次事务，类似于回滚
+  一般用于事务执行过程中输入了错误的指令，直接取消这次事务。
 
 
 
@@ -2085,7 +2069,7 @@ Redis 事务就是将多个命令请求打包，然后**一次性、按顺序**�
 
 #### 监视机制
 
-WATCH 命令是一个乐观锁（optimistic locking），可以在 EXEC 命令执行之前，监视任意数量的数据库键，并在 EXEC 命令执行时，检查被监视的键是否至少有一个已经被修改过了，如果是服务器将拒绝执行事务，并向客户端返回代表事务执行失败的空回复
+WATCH 命令是一个乐观锁（optimistic locking），可以在 multi开启事务命令执行之前，监视任意数量的数据库键，并在 EXEC 命令执行时，检查被监视的键是否至少有一个已经被修改过了，如果是服务器将拒绝执行事务，并向客户端返回代表事务执行失败的空回复
 
 * 添加监控锁
 
@@ -2106,18 +2090,11 @@ WATCH 命令是一个乐观锁（optimistic locking），可以在 EXEC 命令�
 
 #### 实现原理
 
-每个 Redis 数据库都保存着一个 watched_keys 字典，键是某个被 WATCH 监视的数据库键，值则是一个链表，记录了所有监视相应数据库键的客户端：
+每个 Redis 数据库都保存着一个 watched_keys 字典，键是某个被 WATCH 监视的数据库键，值则是一个链表，记录了所有监视相应数据库键的客户端。
 
-```c
-typedef struct redisDb {
-	// 正在被 WATCH 命令监视的键
-    dict *watched_keys;
-}
-```
+所有对数据库进行修改的命令，在执行后都会调用 `multi.c/touchWatchKey` 函数对 watched_keys 字典进行检查，是否有客户端正在监视刚被命令修改过的数据库键，如果有的话函数会将监视被修改键的客户端的 REDIS_DIRTY_CAS 标识打开，表示该客户端的事务安全性已经被破坏。
 
-所有对数据库进行修改的命令，在执行后都会调用 `multi.c/touchWatchKey` 函数对 watched_keys 字典进行检查，是否有客户端正在监视刚被命令修改过的数据库键，如果有的话函数会将监视被修改键的客户端的 REDIS_DIRTY_CAS 标识打开，表示该客户端的事务安全性已经被破坏
-
-服务器接收到个客户端 EXEC 命令时，会根据这个客户端是否打开了 REDIS_DIRTY_CAS 标识，如果打开了说明客户端提交事务不安全，服务器会拒绝执行
+服务器接收到个客户端 EXEC 命令时，会根据这个客户端是否打开了 REDIS_DIRTY_CAS 标识，如果打开了说明客户端提交事务不安全，服务器会拒绝执行。
 
 
 
