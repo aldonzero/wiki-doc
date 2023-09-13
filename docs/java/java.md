@@ -888,10 +888,10 @@ JDK7 对比 JDK8：
 
 10. 记录 HashMap 的修改次数 
 
-   ```java
-   // 每次扩容和更改map结构的计数器
-    transient int modCount;  
-   ```
+  ```java
+  // 每次扩容和更改map结构的计数器
+   transient int modCount;  
+  ```
 
 11. 调整大小下一个容量的值计算方式为：容量 * 负载因子，容量是数组的长度
 
@@ -1297,6 +1297,8 @@ public class Main {
 
 ## 5 异常
 
+异常是一种用于处理错误的机制，表示程序运行时可能遇到的问题，它允许程序在异常情况下执行特定的操作，而不会导致程序崩溃或不受控制。
+
 ### 5.1 Error 和 Exception 区别是什么？
 
 Java 中，所有的异常都有一个共同的祖先 java.lang 包中的 Throwable 类。 Throwable 类有两个重要的子类 `Exception （异常）`和 `Error （错误）`。
@@ -1334,7 +1336,7 @@ Exception 和 Error 二者都是 Java 异常处理的重要子类，各自都包
 
 ### 5.5 try-catch-finally 中，如果 catch 中 return 了，finally 还会执行吗？
 
-不管什么情况，finally代码块都会执行，但是如果try或者catch代码块中有return语句，并且return能执行，那么返回的代码是return中结果，finally无法修改其变量的值；如果finally代码块中有return语句，那么返回的是finally代码块的值。
+**不管什么情况，finally代码块都会执行**，但是如果try或者catch代码块中有return语句，并且return能执行，那么返回的代码是return中结果，finally无法修改其变量的值；**如果finally代码块中有return语句，那么返回的是finally代码块的值**。
 
 ```java
 public static void main(String[] args) throws Exception {

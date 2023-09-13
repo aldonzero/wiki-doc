@@ -5346,18 +5346,17 @@ IO流程：
 
 Redis支持8种不同策略来选择要删除的key：
 
-- noeviction： 不淘汰任何key，但是内存满时不允许写入新数据，默认就是这种策略。
-- volatile-ttl： 对设置了TTL的key，比较key的剩余TTL值，TTL越小越先被淘汰
-- allkeys-random：对全体key ，随机进行淘汰。也就是直接从db->dict中随机挑选
-- volatile-random：对设置了TTL的key ，随机进行淘汰。也就是从db->expires中随机挑选。
-- allkeys-lru： 对全体key，基于LRU算法进行淘汰
-- volatile-lru： 对设置了TTL的key，基于LRU算法进行淘汰
-- allkeys-lfu： 对全体key，基于LFU算法进行淘汰
-- volatile-lfu： 对设置了TTL的key，基于LFI算法进行淘汰
+1. noeviction： 不淘汰任何key，但是内存满时不允许写入新数据，默认就是这种策略。
+2. volatile-ttl： 对设置了TTL的key，比较key的剩余TTL值，TTL越小越先被淘汰
+3. allkeys-random：对全体key ，随机进行淘汰。也就是直接从db->dict中随机挑选
+4. volatile-random：对设置了TTL的key ，随机进行淘汰。也就是从db->expires中随机挑选。
+5. allkeys-lru： 对全体key，基于LRU算法进行淘汰
+6. volatile-lru： 对设置了TTL的key，基于LRU算法进行淘汰
+7. allkeys-lfu： 对全体key，基于LFU算法进行淘汰
+8. volatile-lfu： 对设置了TTL的key，基于LFI算法进行淘汰
   比较容易混淆的有两个：
   - LRU（Least Recently Used），最少最近使用。用当前时间减去最后一次访问时间，这个值越大则淘汰优先级越高。
   - LFU（Least Frequently Used），最少频率使用。会统计每个key的访问频率，值越小淘汰优先级越高。
-
 
 
 ## 场景
